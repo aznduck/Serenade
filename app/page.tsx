@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Download, Music, Sparkles, Play, Pause, Heart } from "lucide-react";
 import { SunoService, SunoClip } from "@/lib/suno-service";
-import InlineProcessing, { ProcessingState } from "@/components/InlineProcessing";
+import InlineProcessing, {
+  ProcessingState,
+} from "@/components/InlineProcessing";
 
 export default function MusicGenerator() {
   const [generatedPrompt, setGeneratedPrompt] = useState("");
@@ -44,10 +46,9 @@ export default function MusicGenerator() {
     currentSubStep: '',
     progress: 0,
     isProcessing: false,
-    data: {}
+    data: {},
   });
   const [isProcessingVisible, setIsProcessingVisible] = useState(false);
-
 
   const handleDownload = async (clip: SunoClip) => {
     if (!clip.audio_url || isDownloading[clip.id]) return;
@@ -81,8 +82,8 @@ export default function MusicGenerator() {
   // Check for OAuth callback tokens on page load and restore from localStorage
   useEffect(() => {
     // First, check localStorage for existing tokens
-    const storedSpotifyToken = localStorage.getItem('spotify_access_token');
-    const storedGmailToken = localStorage.getItem('gmail_access_token');
+    const storedSpotifyToken = localStorage.getItem("spotify_access_token");
+    const storedGmailToken = localStorage.getItem("gmail_access_token");
 
     if (storedSpotifyToken) {
       setSpotifyToken(storedSpotifyToken);
@@ -95,18 +96,18 @@ export default function MusicGenerator() {
 
     // Then check URL parameters for new tokens
     const urlParams = new URLSearchParams(window.location.search);
-    const spotifyAccessToken = urlParams.get('spotify_access_token');
-    const gmailAccessToken = urlParams.get('gmail_access_token');
+    const spotifyAccessToken = urlParams.get("spotify_access_token");
+    const gmailAccessToken = urlParams.get("gmail_access_token");
 
     if (spotifyAccessToken) {
       setSpotifyToken(spotifyAccessToken);
       setIsSpotifyConnected(true);
-      localStorage.setItem('spotify_access_token', spotifyAccessToken);
+      localStorage.setItem("spotify_access_token", spotifyAccessToken);
     }
     if (gmailAccessToken) {
       setGmailToken(gmailAccessToken);
       setIsGmailConnected(true);
-      localStorage.setItem('gmail_access_token', gmailAccessToken);
+      localStorage.setItem("gmail_access_token", gmailAccessToken);
     }
 
     if (spotifyAccessToken || gmailAccessToken) {
@@ -118,37 +119,38 @@ export default function MusicGenerator() {
   const handleSpotifyLogin = async () => {
     if (isSpotifyConnected) return;
     setIsSpotifyConnecting(true);
-    window.location.href = '/api/spotify/auth';
+    window.location.href = "/api/spotify/auth";
   };
 
   const handleSpotifyDisconnect = async () => {
     setSpotifyToken(null);
     setIsSpotifyConnected(false);
-    localStorage.removeItem('spotify_access_token');
+    localStorage.removeItem("spotify_access_token");
 
     // Clear Spotify OAuth session by making a request to revoke endpoint
     try {
       if (spotifyToken) {
-        await fetch('https://accounts.spotify.com/api/revoke', {
-          method: 'POST',
+        await fetch("https://accounts.spotify.com/api/revoke", {
+          method: "POST",
           headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+            "Content-Type": "application/x-www-form-urlencoded",
           },
           body: new URLSearchParams({
             token: spotifyToken,
-          })
+          }),
         });
       }
     } catch (error) {
-      console.log('Error revoking Spotify token:', error);
+      console.log("Error revoking Spotify token:", error);
     }
 
     // Clear all Spotify-related cookies and session data
     document.cookie.split(";").forEach((c) => {
       const eqPos = c.indexOf("=");
       const name = eqPos > -1 ? c.substring(0, eqPos) : c;
-      if (name.trim().toLowerCase().includes('spotify')) {
-        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+      if (name.trim().toLowerCase().includes("spotify")) {
+        document.cookie =
+          name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
       }
     });
   };
@@ -156,45 +158,52 @@ export default function MusicGenerator() {
   const handleGmailLogin = async () => {
     if (isGmailConnected) return;
     setIsGmailConnecting(true);
-    window.location.href = '/api/gmail/auth';
+    window.location.href = "/api/gmail/auth";
   };
 
   const handleGmailDisconnect = async () => {
     setGmailToken(null);
     setIsGmailConnected(false);
-    localStorage.removeItem('gmail_access_token');
+    localStorage.removeItem("gmail_access_token");
 
     // Clear Gmail OAuth session by revoking the token
     try {
       if (gmailToken) {
-        await fetch(`https://oauth2.googleapis.com/revoke?token=${gmailToken}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
+        await fetch(
+          `https://oauth2.googleapis.com/revoke?token=${gmailToken}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
           }
-        });
+        );
       }
     } catch (error) {
-      console.log('Error revoking Gmail token:', error);
+      console.log("Error revoking Gmail token:", error);
     }
 
     // Clear all Google-related cookies and session data
     document.cookie.split(";").forEach((c) => {
       const eqPos = c.indexOf("=");
       const name = eqPos > -1 ? c.substring(0, eqPos) : c;
-      if (name.trim().toLowerCase().includes('google') || name.trim().toLowerCase().includes('gmail')) {
-        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+      if (
+        name.trim().toLowerCase().includes("google") ||
+        name.trim().toLowerCase().includes("gmail")
+      ) {
+        document.cookie =
+          name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
       }
     });
   };
 
   const updateProcessingState = (updates: Partial<ProcessingState>) => {
-    setProcessingState(prev => ({ ...prev, ...updates }));
+    setProcessingState((prev) => ({ ...prev, ...updates }));
   };
 
   const handleGenerateFromLife = async () => {
     if (!isSpotifyConnected || !isGmailConnected) {
-      setError('Please connect both Spotify and Gmail first');
+      setError("Please connect both Spotify and Gmail first");
       return;
     }
 
@@ -210,7 +219,7 @@ export default function MusicGenerator() {
       currentSubStep: '',
       progress: 0,
       isProcessing: true,
-      data: {}
+      data: {},
     });
 
     try {
@@ -238,16 +247,18 @@ export default function MusicGenerator() {
         progress: 20
       });
 
-      const gmailResponse = await fetch('/api/gmail/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: gmailToken })
+      const gmailResponse = await fetch("/api/gmail/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken: gmailToken }),
       });
 
       const gmailData = gmailResponse.ok ? await gmailResponse.json() : null;
 
       if (gmailData?.data?.recentEmails) {
-        const subjects = gmailData.data.recentEmails.map((email: any) => email.subject);
+        const subjects = gmailData.data.recentEmails.map(
+          (email: any) => email.subject
+        );
         updateProcessingState({
           currentSubStep: `Processing ${gmailData.data.count} messages...`,
           progress: 30,
@@ -255,7 +266,7 @@ export default function MusicGenerator() {
         });
       }
 
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Show preview
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Show preview
 
       // STEP 3: Spotify Data Collection
       updateProcessingState({
@@ -264,16 +275,20 @@ export default function MusicGenerator() {
         progress: 40
       });
 
-      const spotifyResponse = await fetch('/api/spotify/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: spotifyToken })
+      const spotifyResponse = await fetch("/api/spotify/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken: spotifyToken }),
       });
 
-      const spotifyData = spotifyResponse.ok ? await spotifyResponse.json() : null;
+      const spotifyData = spotifyResponse.ok
+        ? await spotifyResponse.json()
+        : null;
 
       if (spotifyData?.data?.topArtists) {
-        const artists = spotifyData.data.topArtists.map((artist: any) => artist.name);
+        const artists = spotifyData.data.topArtists.map(
+          (artist: any) => artist.name
+        );
         updateProcessingState({
           currentSubStep: 'Loading top tracks...',
           progress: 55,
@@ -281,7 +296,7 @@ export default function MusicGenerator() {
         });
       }
 
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Show preview
+      await new Promise((resolve) => setTimeout(resolve, 1000)); // Show preview
 
       // STEP 4: Claude Prompt Generation
       updateProcessingState({
@@ -290,9 +305,9 @@ export default function MusicGenerator() {
         progress: 70
       });
 
-      const promptResponse = await fetch('/api/generate-prompt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const promptResponse = await fetch("/api/generate-prompt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           spotifyData: spotifyData?.data,
           gmailData: gmailData?.data,
@@ -301,7 +316,7 @@ export default function MusicGenerator() {
       });
 
       if (!promptResponse.ok) {
-        throw new Error('Failed to generate personalized prompt');
+        throw new Error("Failed to generate personalized prompt");
       }
 
       const promptData = await promptResponse.json();
@@ -316,13 +331,13 @@ export default function MusicGenerator() {
       setGeneratedPrompt(promptData.prompt);
       setGeneratedTags(promptData.tags);
 
-      await new Promise(resolve => setTimeout(resolve, 2000)); // Show typing effect
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Show typing effect
 
       // STEP 4: Suno Generation (Non-blocking)
       updateProcessingState({
-        currentStep: 'suno',
-        currentSubStep: 'Sending prompt to Suno AI...',
-        progress: 80
+        currentStep: "suno",
+        currentSubStep: "Sending prompt to Suno AI...",
+        progress: 80,
       });
 
       // Start Suno generation but don't wait for completion
@@ -336,43 +351,50 @@ export default function MusicGenerator() {
           if (clips && clips.length > 0) {
             setGeneratedClips(clips);
             // Check if any clips are available for streaming
-            const hasStreamingClips = clips.some(clip =>
-              clip.status === 'streaming' && clip.audio_url
+            const hasStreamingClips = clips.some(
+              (clip) => clip.status === "streaming" && clip.audio_url
             );
             if (hasStreamingClips) {
               setIsComplete(true);
             }
           }
         }
-      ).then((finalClips) => {
-        setGeneratedClips(finalClips);
-        setIsComplete(true);
-      }).catch((error) => {
-        console.error('Suno generation error:', error);
-        setError(error instanceof Error ? error.message : 'Failed to generate song');
-      });
+      )
+        .then((finalClips) => {
+          setGeneratedClips(finalClips);
+          setIsComplete(true);
+        })
+        .catch((error) => {
+          console.error("Suno generation error:", error);
+          setError(
+            error instanceof Error ? error.message : "Failed to generate song"
+          );
+        });
 
       // Update to show Suno started, then auto-complete the processing view
       updateProcessingState({
-        currentSubStep: 'AI composing your song... You can return to the main page!',
-        progress: 85
+        currentSubStep:
+          "AI composing your song... You can return to the main page!",
+        progress: 85,
       });
 
       // Auto-complete after a short delay to let user see Suno started
       setTimeout(() => {
         updateProcessingState({
-          currentStep: 'complete',
-          currentSubStep: 'Song generation in progress...',
-          progress: 100
+          currentStep: "complete",
+          currentSubStep: "Song generation in progress...",
+          progress: 100,
         });
       }, 2000);
-
     } catch (error) {
-      console.error('Generate from life error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to generate personalized song';
+      console.error("Generate from life error:", error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to generate personalized song";
       setError(errorMessage);
       updateProcessingState({
-        data: { ...processingState.data, error: errorMessage }
+        data: { ...processingState.data, error: errorMessage },
       });
     } finally {
       setIsGeneratingFromLife(false);
@@ -384,10 +406,10 @@ export default function MusicGenerator() {
     setIsGeneratingFromLife(false);
     updateProcessingState({
       isProcessing: false,
-      currentStep: 'gmail',
-      currentSubStep: '',
+      currentStep: "gmail",
+      currentSubStep: "",
       progress: 0,
-      data: {}
+      data: {},
     });
   };
 
@@ -594,20 +616,15 @@ export default function MusicGenerator() {
               <Sparkles className="w-6 h-6" />
             </div>
             <h1 className="text-4xl font-bold text-balance bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              AI Music Generator
+              Serenade
             </h1>
-            <p className="text-lg text-muted-foreground text-pretty">
-              Transform your ideas into beautiful music with the power of AI!
-            </p>
           </div>
 
           {/* Main Interface */}
           <Card className="p-8 backdrop-blur-sm bg-card/80 border-border/50 shadow-xl">
             <div className="space-y-6">
-
               {/* OAuth Connections */}
               <div className="space-y-4">
-
                 {/* Spotify Login */}
                 <div className="flex gap-2">
                   <Button
@@ -627,13 +644,9 @@ export default function MusicGenerator() {
                         Connecting to Spotify...
                       </>
                     ) : isSpotifyConnected ? (
-                      <>
-                        ✅ Spotify Connected
-                      </>
+                      <>✅ Spotify Connected</>
                     ) : (
-                      <>
-                        🎵 Connect Spotify
-                      </>
+                      <>🎵 Connect Spotify</>
                     )}
                   </Button>
                   {isSpotifyConnected && (
@@ -667,13 +680,9 @@ export default function MusicGenerator() {
                         Connecting to Gmail...
                       </>
                     ) : isGmailConnected ? (
-                      <>
-                        ✅ Gmail Connected
-                      </>
+                      <>✅ Gmail Connected</>
                     ) : (
-                      <>
-                        📧 Connect Gmail
-                      </>
+                      <>📧 Connect Gmail</>
                     )}
                   </Button>
                   {isGmailConnected && (
@@ -704,7 +713,7 @@ export default function MusicGenerator() {
                     ) : (
                       <>
                         <Heart className="w-5 h-5 mr-2" />
-                        Generate My Life Song
+                        Serenade
                       </>
                     )}
                   </Button>
@@ -723,10 +732,16 @@ export default function MusicGenerator() {
                 {/* Display Generated Prompt */}
                 {generatedPrompt && (
                   <div className="mt-6 p-4 bg-slate-50 rounded-lg border">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Generated Prompt for Suno AI:</h3>
-                    <p className="text-sm text-slate-600 mb-2">"<em>{generatedPrompt}</em>"</p>
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2">
+                      Generated Prompt for Suno AI:
+                    </h3>
+                    <p className="text-sm text-slate-600 mb-2">
+                      "<em>{generatedPrompt}</em>"
+                    </p>
                     {generatedTags && (
-                      <p className="text-xs text-slate-500">Tags: {generatedTags}</p>
+                      <p className="text-xs text-slate-500">
+                        Tags: {generatedTags}
+                      </p>
                     )}
                   </div>
                 )}
@@ -1048,23 +1063,8 @@ export default function MusicGenerator() {
               )}
             </div>
           </Card>
-
-          {/* Footer */}
-          <p className="text-sm text-muted-foreground">
-            Powered by{" "}
-            <a
-              href="https://suno.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-primary"
-            >
-              Suno API
-            </a>{" "}
-            • Create any song, any time!
-          </p>
         </div>
       </div>
-
     </div>
   );
 }
