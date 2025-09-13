@@ -8,6 +8,7 @@ import { SunoService, SunoClip } from "@/lib/suno-service";
 import InlineProcessing, {
   ProcessingState,
 } from "@/components/InlineProcessing";
+import { Waveform } from "@/components/ui/waveform";
 
 export default function MusicGenerator() {
   const [generatedPrompt, setGeneratedPrompt] = useState("");
@@ -986,6 +987,19 @@ export default function MusicGenerator() {
                                     </div>
                                   </div>
                                 )}
+
+                              {/* Live Audio Wave Visualization */}
+                              {clip.status === "complete" && clip.audio_url && (
+                                <div className="mt-4">
+                                  <Waveform
+                                    audioElement={audioElements[clip.id] || null}
+                                    audioUrl={clip.audio_url}
+                                    isPlaying={!!isPlaying[clip.id]}
+                                    className="rounded-lg shadow-sm"
+                                    height={80}
+                                  />
+                                </div>
+                              )}
 
                               {/* Control Buttons */}
                               <div className="flex gap-2">
