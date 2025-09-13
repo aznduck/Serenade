@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     authUrl.searchParams.set('scope', scopes);
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('state', state);
+    authUrl.searchParams.set('show_dialog', 'true'); // Force account selection
 
     return NextResponse.redirect(authUrl.toString());
   } catch (error) {
