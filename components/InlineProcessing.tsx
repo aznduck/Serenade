@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Mail, Music, Brain, Sparkles, CheckCircle, Loader2, X } from 'lucide-react';
+import { Mail, Music, Brain, Sparkles, CheckCircle, Loader2, X, MessageSquare } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
-export type ProcessingStep = 'gmail' | 'spotify' | 'claude' | 'suno' | 'complete';
+export type ProcessingStep = 'messages' | 'gmail' | 'spotify' | 'claude' | 'suno' | 'complete';
 
 export interface ProcessingState {
   currentStep: ProcessingStep;
@@ -11,6 +11,7 @@ export interface ProcessingState {
   progress: number;
   isProcessing: boolean;
   data: {
+    messagesPreview?: string[];
     gmailPreview?: string[];
     spotifyPreview?: string[];
     generatedPrompt?: string;
@@ -63,6 +64,12 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
 
   const steps = [
     {
+      key: 'messages' as ProcessingStep,
+      icon: MessageSquare,
+      title: 'Message Analysis',
+      description: 'Extracting conversation patterns',
+    },
+    {
       key: 'gmail' as ProcessingStep,
       icon: Mail,
       title: 'Gmail Collection',
@@ -89,7 +96,7 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
   ];
 
   const getStepStatus = (stepKey: ProcessingStep) => {
-    const stepOrder = ['gmail', 'spotify', 'claude', 'suno'];
+    const stepOrder = ['messages', 'gmail', 'spotify', 'claude', 'suno'];
     const currentIndex = stepOrder.indexOf(processingState.currentStep);
     const stepIndex = stepOrder.indexOf(stepKey);
 
@@ -128,7 +135,7 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
         </div>
 
         {/* Compact Steps */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {steps.map((step) => {
             const status = getStepStatus(step.key);
             const IconComponent = step.icon;
@@ -172,6 +179,17 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
 
         {/* Data Previews */}
         <div className="space-y-3">
+          {processingState.data.messagesPreview && (
+            <div className="p-3 bg-white/60 rounded-lg border border-gray-200">
+              <strong className="text-xs text-gray-600">Recent conversations:</strong>
+              <div className="mt-1 text-xs text-gray-700">
+                {processingState.data.messagesPreview.slice(0, 2).map((conversation, i) => (
+                  <div key={i} className="truncate">• {conversation}</div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {processingState.data.gmailPreview && (
             <div className="p-3 bg-white/60 rounded-lg border border-gray-200">
               <strong className="text-xs text-gray-600">Recent emails:</strong>

@@ -40,7 +40,7 @@ export default function MusicGenerator() {
 
   // Processing Modal state
   const [processingState, setProcessingState] = useState<ProcessingState>({
-    currentStep: 'gmail',
+    currentStep: 'messages',
     currentSubStep: '',
     progress: 0,
     isProcessing: false,
@@ -206,7 +206,7 @@ export default function MusicGenerator() {
     setError(null);
 
     updateProcessingState({
-      currentStep: 'gmail',
+      currentStep: 'messages',
       currentSubStep: '',
       progress: 0,
       isProcessing: true,
@@ -214,11 +214,28 @@ export default function MusicGenerator() {
     });
 
     try {
-      // STEP 1: Gmail Data Collection
+      // STEP 1: Message Data Collection
+      updateProcessingState({
+        currentStep: 'messages',
+        currentSubStep: 'Analyzing conversation patterns...',
+        progress: 5
+      });
+
+      // For now, simulate message processing since it's disabled
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      updateProcessingState({
+        currentSubStep: 'Processing recent conversations...',
+        progress: 15,
+        data: { messagesPreview: ['Contact_1: 3 messages', 'Contact_2: 7 messages'] }
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // STEP 2: Gmail Data Collection
       updateProcessingState({
         currentStep: 'gmail',
         currentSubStep: 'Fetching recent messages...',
-        progress: 5
+        progress: 20
       });
 
       const gmailResponse = await fetch('/api/gmail/data', {
@@ -233,18 +250,18 @@ export default function MusicGenerator() {
         const subjects = gmailData.data.recentEmails.map((email: any) => email.subject);
         updateProcessingState({
           currentSubStep: `Processing ${gmailData.data.count} messages...`,
-          progress: 15,
-          data: { gmailPreview: subjects }
+          progress: 30,
+          data: { ...processingState.data, gmailPreview: subjects }
         });
       }
 
       await new Promise(resolve => setTimeout(resolve, 1000)); // Show preview
 
-      // STEP 2: Spotify Data Collection
+      // STEP 3: Spotify Data Collection
       updateProcessingState({
         currentStep: 'spotify',
         currentSubStep: 'Loading top artists...',
-        progress: 25
+        progress: 40
       });
 
       const spotifyResponse = await fetch('/api/spotify/data', {
@@ -259,18 +276,18 @@ export default function MusicGenerator() {
         const artists = spotifyData.data.topArtists.map((artist: any) => artist.name);
         updateProcessingState({
           currentSubStep: 'Loading top tracks...',
-          progress: 40,
+          progress: 55,
           data: { ...processingState.data, spotifyPreview: artists }
         });
       }
 
       await new Promise(resolve => setTimeout(resolve, 1000)); // Show preview
 
-      // STEP 3: Claude Prompt Generation
+      // STEP 4: Claude Prompt Generation
       updateProcessingState({
         currentStep: 'claude',
         currentSubStep: 'Analyzing your data...',
-        progress: 55
+        progress: 70
       });
 
       const promptResponse = await fetch('/api/generate-prompt', {
@@ -278,7 +295,8 @@ export default function MusicGenerator() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           spotifyData: spotifyData?.data,
-          gmailData: gmailData?.data
+          gmailData: gmailData?.data,
+          includeMessages: true
         })
       });
 
@@ -290,7 +308,7 @@ export default function MusicGenerator() {
 
       updateProcessingState({
         currentSubStep: 'Generating personalized prompt...',
-        progress: 70,
+        progress: 85,
         data: { ...processingState.data, generatedPrompt: promptData.prompt }
       });
 

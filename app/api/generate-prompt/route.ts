@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from '@anthropic-ai/sdk';
+import { getRecentMessages, prepareMessagesForPrompt } from '@/lib/imessage-extractor';
 
 export async function POST(request: NextRequest) {
   try {
-    const { spotifyData, gmailData } = await request.json();
+    const { spotifyData, gmailData, includeMessages = false } = await request.json();
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -14,9 +15,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!spotifyData && !gmailData) {
+    if (!spotifyData && !gmailData && !includeMessages) {
       return NextResponse.json(
-        { error: "At least Spotify or Gmail data is required" },
+        { error: "At least Spotify, Gmail data, or message analysis is required" },
         { status: 400 }
       );
     }
@@ -24,6 +25,18 @@ export async function POST(request: NextRequest) {
     const anthropic = new Anthropic({
       apiKey: apiKey,
     });
+
+    // Extract message data if requested
+    let messageContext = '';
+    if (includeMessages) {
+      try {
+        const messages = await getRecentMessages(7); // Last 7 days
+        messageContext = prepareMessagesForPrompt(messages);
+      } catch (error) {
+        console.warn('Could not extract messages:', error);
+        messageContext = '';
+      }
+    }
 
     // Construct the user data summary
     const userDataSummary = {
@@ -40,7 +53,8 @@ export async function POST(request: NextRequest) {
       recentEmails: gmailData ? {
         subjects: gmailData.recentEmails?.map((email: any) => email.subject),
         count: gmailData.count
-      } : null
+      } : null,
+      messageActivity: messageContext || null
     };
 
     const promptForClaude = `You are a creative AI assistant that creates personalized song prompts for Suno AI based on user data.
@@ -51,7 +65,8 @@ ${JSON.stringify(userDataSummary, null, 2)}
 Create a Suno AI song prompt that:
 1. Reflects their music taste from Spotify data (if provided)
 2. Incorporates themes from their recent email subjects (if provided)
-3. Creates a unique, personal song that tells their story
+3. Captures their communication patterns and relationships from message activity (if provided)
+4. Creates a unique, personal song that tells their story
 
 Your response should be in this exact format:
 {
