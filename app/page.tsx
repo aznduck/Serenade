@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { Download, Music, Sparkles, Play, Pause } from "lucide-react";
+import { Download, Music, Sparkles, Play, Pause, Heart, User } from "lucide-react";
 import { SunoService, SunoClip } from "@/lib/suno-service";
 
 export default function MusicGenerator() {
@@ -27,6 +27,18 @@ export default function MusicGenerator() {
   const [isDownloading, setIsDownloading] = useState<{
     [key: string]: boolean;
   }>({});
+
+  // OAuth state
+  const [spotifyToken, setSpotifyToken] = useState<string | null>(null);
+  const [gmailToken, setGmailToken] = useState<string | null>(null);
+  const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
+  const [isGmailConnected, setIsGmailConnected] = useState(false);
+  const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
+  const [isGmailConnecting, setIsGmailConnecting] = useState(false);
+
+  // Generate from My Life state
+  const [isGeneratingFromLife, setIsGeneratingFromLife] = useState(false);
+  const [lifeGenerationStatus, setLifeGenerationStatus] = useState<string>("");
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -88,6 +100,146 @@ export default function MusicGenerator() {
       link.click();
     } finally {
       setIsDownloading((prev) => ({ ...prev, [clip.id]: false }));
+    }
+  };
+
+  // Check for OAuth callback tokens on page load and restore from localStorage
+  useEffect(() => {
+    // First, check localStorage for existing tokens
+    const storedSpotifyToken = localStorage.getItem('spotify_access_token');
+    const storedGmailToken = localStorage.getItem('gmail_access_token');
+
+    if (storedSpotifyToken) {
+      setSpotifyToken(storedSpotifyToken);
+      setIsSpotifyConnected(true);
+    }
+    if (storedGmailToken) {
+      setGmailToken(storedGmailToken);
+      setIsGmailConnected(true);
+    }
+
+    // Then check URL parameters for new tokens
+    const urlParams = new URLSearchParams(window.location.search);
+    const spotifyAccessToken = urlParams.get('spotify_access_token');
+    const gmailAccessToken = urlParams.get('gmail_access_token');
+
+    if (spotifyAccessToken) {
+      setSpotifyToken(spotifyAccessToken);
+      setIsSpotifyConnected(true);
+      localStorage.setItem('spotify_access_token', spotifyAccessToken);
+    }
+    if (gmailAccessToken) {
+      setGmailToken(gmailAccessToken);
+      setIsGmailConnected(true);
+      localStorage.setItem('gmail_access_token', gmailAccessToken);
+    }
+
+    if (spotifyAccessToken || gmailAccessToken) {
+      // Clean URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const handleSpotifyLogin = async () => {
+    if (isSpotifyConnected) return;
+    setIsSpotifyConnecting(true);
+    window.location.href = '/api/spotify/auth';
+  };
+
+  const handleSpotifyDisconnect = () => {
+    setSpotifyToken(null);
+    setIsSpotifyConnected(false);
+    localStorage.removeItem('spotify_access_token');
+  };
+
+  const handleGmailLogin = async () => {
+    if (isGmailConnected) return;
+    setIsGmailConnecting(true);
+    window.location.href = '/api/gmail/auth';
+  };
+
+  const handleGmailDisconnect = () => {
+    setGmailToken(null);
+    setIsGmailConnected(false);
+    localStorage.removeItem('gmail_access_token');
+  };
+
+  const handleGenerateFromLife = async () => {
+    if (!isSpotifyConnected || !isGmailConnected) {
+      setError('Please connect both Spotify and Gmail first');
+      return;
+    }
+
+    setIsGeneratingFromLife(true);
+    setIsComplete(false);
+    setGeneratedClips([]);
+    setError(null);
+
+    try {
+      setLifeGenerationStatus("Fetching your music preferences...");
+
+      const spotifyResponse = await fetch('/api/spotify/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: spotifyToken })
+      });
+
+      const spotifyData = spotifyResponse.ok ? await spotifyResponse.json() : null;
+
+      setLifeGenerationStatus("Fetching your recent emails...");
+
+      const gmailResponse = await fetch('/api/gmail/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: gmailToken })
+      });
+
+      const gmailData = gmailResponse.ok ? await gmailResponse.json() : null;
+
+      setLifeGenerationStatus("Creating your personalized song prompt...");
+
+      // Generate personalized prompt using Claude
+      const promptResponse = await fetch('/api/generate-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          spotifyData: spotifyData?.data,
+          gmailData: gmailData?.data
+        })
+      });
+
+      if (!promptResponse.ok) {
+        throw new Error('Failed to generate personalized prompt');
+      }
+
+      const promptData = await promptResponse.json();
+
+      setLifeGenerationStatus("Generating your personalized song...");
+
+      // Directly generate the song with Suno API
+      const clips = await SunoService.generateAndWaitForCompletion(
+        {
+          prompt: promptData.prompt,
+          tags: promptData.tags || undefined,
+          makeInstrumental: false,
+        },
+        (clips) => {
+          if (clips && clips.length > 0) {
+            setGeneratedClips(clips);
+          }
+        }
+      );
+
+      setGeneratedClips(clips);
+      setIsComplete(true);
+      setLifeGenerationStatus("");
+
+    } catch (error) {
+      console.error('Generate from life error:', error);
+      setError(error instanceof Error ? error.message : 'Failed to generate personalized song');
+      setLifeGenerationStatus("");
+    } finally {
+      setIsGeneratingFromLife(false);
     }
   };
 
@@ -359,6 +511,139 @@ export default function MusicGenerator() {
                   </>
                 )}
               </Button>
+
+              {/* OAuth Connections */}
+              <div className="space-y-4">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border/50" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">Connect Your Life</span>
+                  </div>
+                </div>
+
+                {/* Spotify Login */}
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleSpotifyLogin}
+                    disabled={isSpotifyConnected || isSpotifyConnecting}
+                    size="lg"
+                    variant={isSpotifyConnected ? "default" : "outline"}
+                    className={`flex-1 h-12 text-base font-semibold ${
+                      isSpotifyConnected
+                        ? "bg-green-600 hover:bg-green-700 text-white"
+                        : "border-2 border-green-500/20 hover:border-green-500/40 hover:bg-green-500/5"
+                    }`}
+                  >
+                    {isSpotifyConnecting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin mr-2" />
+                        Connecting to Spotify...
+                      </>
+                    ) : isSpotifyConnected ? (
+                      <>
+                        ✅ Spotify Connected
+                      </>
+                    ) : (
+                      <>
+                        🎵 Connect Spotify
+                      </>
+                    )}
+                  </Button>
+                  {isSpotifyConnected && (
+                    <Button
+                      onClick={handleSpotifyDisconnect}
+                      size="lg"
+                      variant="outline"
+                      className="h-12 px-4 border-2 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/5 text-red-600"
+                    >
+                      ❌
+                    </Button>
+                  )}
+                </div>
+
+                {/* Gmail Login */}
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleGmailLogin}
+                    disabled={isGmailConnected || isGmailConnecting}
+                    size="lg"
+                    variant={isGmailConnected ? "default" : "outline"}
+                    className={`flex-1 h-12 text-base font-semibold ${
+                      isGmailConnected
+                        ? "bg-blue-600 hover:bg-blue-700 text-white"
+                        : "border-2 border-blue-500/20 hover:border-blue-500/40 hover:bg-blue-500/5"
+                    }`}
+                  >
+                    {isGmailConnecting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin mr-2" />
+                        Connecting to Gmail...
+                      </>
+                    ) : isGmailConnected ? (
+                      <>
+                        ✅ Gmail Connected
+                      </>
+                    ) : (
+                      <>
+                        📧 Connect Gmail
+                      </>
+                    )}
+                  </Button>
+                  {isGmailConnected && (
+                    <Button
+                      onClick={handleGmailDisconnect}
+                      size="lg"
+                      variant="outline"
+                      className="h-12 px-4 border-2 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/5 text-red-600"
+                    >
+                      ❌
+                    </Button>
+                  )}
+                </div>
+
+                {/* Generate from Life Button */}
+                {isSpotifyConnected && isGmailConnected && (
+                  <Button
+                    onClick={handleGenerateFromLife}
+                    disabled={isGenerating || isGeneratingFromLife}
+                    size="lg"
+                    className="w-full h-12 text-base font-semibold bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white"
+                  >
+                    {isGeneratingFromLife ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                        {lifeGenerationStatus || "Generating..."}
+                      </>
+                    ) : (
+                      <>
+                        <Heart className="w-5 h-5 mr-2" />
+                        Generate My Life Song
+                      </>
+                    )}
+                  </Button>
+                )}
+
+                <p className="text-xs text-muted-foreground text-center">
+                  {!isSpotifyConnected && !isGmailConnected
+                    ? "Connect both services to create a song inspired by your music taste and recent life events"
+                    : !isSpotifyConnected
+                    ? "Connect Spotify to complete the setup"
+                    : !isGmailConnected
+                    ? "Connect Gmail to complete the setup"
+                    : "Ready to generate your personalized song!"}
+                </p>
+              </div>
+
+              {/* Life Generation Status */}
+              {lifeGenerationStatus && (
+                <div className="text-center">
+                  <p className="text-sm text-primary font-medium">
+                    {lifeGenerationStatus}
+                  </p>
+                </div>
+              )}
 
               {/* Status Display */}
               {isGenerating && generatedClips.length > 0 && (
