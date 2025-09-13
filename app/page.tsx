@@ -42,8 +42,8 @@ export default function MusicGenerator() {
 
   // Processing Modal state
   const [processingState, setProcessingState] = useState<ProcessingState>({
-    currentStep: "gmail",
-    currentSubStep: "",
+    currentStep: 'messages',
+    currentSubStep: '',
     progress: 0,
     isProcessing: false,
     data: {},
@@ -215,19 +215,36 @@ export default function MusicGenerator() {
     setError(null);
 
     updateProcessingState({
-      currentStep: "gmail",
-      currentSubStep: "",
+      currentStep: 'messages',
+      currentSubStep: '',
       progress: 0,
       isProcessing: true,
       data: {},
     });
 
     try {
-      // STEP 1: Gmail Data Collection
+      // STEP 1: Message Data Collection
       updateProcessingState({
-        currentStep: "gmail",
-        currentSubStep: "Fetching recent messages...",
-        progress: 5,
+        currentStep: 'messages',
+        currentSubStep: 'Analyzing conversation patterns...',
+        progress: 5
+      });
+
+      // For now, simulate message processing since it's disabled
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      updateProcessingState({
+        currentSubStep: 'Processing recent conversations...',
+        progress: 15,
+        data: { messagesPreview: ['Contact_1: 3 messages', 'Contact_2: 7 messages'] }
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // STEP 2: Gmail Data Collection
+      updateProcessingState({
+        currentStep: 'gmail',
+        currentSubStep: 'Fetching recent messages...',
+        progress: 20
       });
 
       const gmailResponse = await fetch("/api/gmail/data", {
@@ -244,18 +261,18 @@ export default function MusicGenerator() {
         );
         updateProcessingState({
           currentSubStep: `Processing ${gmailData.data.count} messages...`,
-          progress: 15,
-          data: { gmailPreview: subjects },
+          progress: 30,
+          data: { ...processingState.data, gmailPreview: subjects }
         });
       }
 
       await new Promise((resolve) => setTimeout(resolve, 1000)); // Show preview
 
-      // STEP 2: Spotify Data Collection
+      // STEP 3: Spotify Data Collection
       updateProcessingState({
-        currentStep: "spotify",
-        currentSubStep: "Loading top artists...",
-        progress: 25,
+        currentStep: 'spotify',
+        currentSubStep: 'Loading top artists...',
+        progress: 40
       });
 
       const spotifyResponse = await fetch("/api/spotify/data", {
@@ -273,19 +290,19 @@ export default function MusicGenerator() {
           (artist: any) => artist.name
         );
         updateProcessingState({
-          currentSubStep: "Loading top tracks...",
-          progress: 40,
-          data: { ...processingState.data, spotifyPreview: artists },
+          currentSubStep: 'Loading top tracks...',
+          progress: 55,
+          data: { ...processingState.data, spotifyPreview: artists }
         });
       }
 
       await new Promise((resolve) => setTimeout(resolve, 1000)); // Show preview
 
-      // STEP 3: Claude Prompt Generation
+      // STEP 4: Claude Prompt Generation
       updateProcessingState({
-        currentStep: "claude",
-        currentSubStep: "Analyzing your data...",
-        progress: 55,
+        currentStep: 'claude',
+        currentSubStep: 'Analyzing your data...',
+        progress: 70
       });
 
       const promptResponse = await fetch("/api/generate-prompt", {
@@ -294,7 +311,8 @@ export default function MusicGenerator() {
         body: JSON.stringify({
           spotifyData: spotifyData?.data,
           gmailData: gmailData?.data,
-        }),
+          includeMessages: true
+        })
       });
 
       if (!promptResponse.ok) {
@@ -304,9 +322,9 @@ export default function MusicGenerator() {
       const promptData = await promptResponse.json();
 
       updateProcessingState({
-        currentSubStep: "Generating personalized prompt...",
-        progress: 70,
-        data: { ...processingState.data, generatedPrompt: promptData.prompt },
+        currentSubStep: 'Generating personalized prompt...',
+        progress: 85,
+        data: { ...processingState.data, generatedPrompt: promptData.prompt }
       });
 
       // Store the generated prompt for display
