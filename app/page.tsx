@@ -1,15 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { Download, Music, Sparkles, Play, Pause } from "lucide-react";
+import { Download, Music, Sparkles, Play, Pause, Heart, User } from "lucide-react";
 import { SunoService, SunoClip } from "@/lib/suno-service";
 
 export default function MusicGenerator() {
-  const [prompt, setPrompt] = useState("");
-  const [tags, setTags] = useState("");
+  const [generatedPrompt, setGeneratedPrompt] = useState("");
+  const [generatedTags, setGeneratedTags] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [generatedClips, setGeneratedClips] = useState<SunoClip[]>([]);
@@ -28,39 +28,18 @@ export default function MusicGenerator() {
     [key: string]: boolean;
   }>({});
 
-  const handleGenerate = async () => {
-    if (!prompt.trim()) return;
+  // OAuth state
+  const [spotifyToken, setSpotifyToken] = useState<string | null>(null);
+  const [gmailToken, setGmailToken] = useState<string | null>(null);
+  const [isSpotifyConnected, setIsSpotifyConnected] = useState(false);
+  const [isGmailConnected, setIsGmailConnected] = useState(false);
+  const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
+  const [isGmailConnecting, setIsGmailConnecting] = useState(false);
 
-    setIsGenerating(true);
-    setIsComplete(false);
-    setGeneratedClips([]);
-    setError(null);
+  // Generate from My Life state
+  const [isGeneratingFromLife, setIsGeneratingFromLife] = useState(false);
+  const [lifeGenerationStatus, setLifeGenerationStatus] = useState<string>("");
 
-    try {
-      const clips = await SunoService.generateAndWaitForCompletion(
-        {
-          prompt: prompt.trim(),
-          tags: tags.trim() || undefined,
-          makeInstrumental: false,
-        },
-        (clips, progressValue) => {
-          if (clips && clips.length > 0) {
-            setGeneratedClips(clips);
-          }
-        }
-      );
-
-      setGeneratedClips(clips);
-      setIsComplete(true);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "An unknown error occurred";
-      setError(errorMessage);
-      console.error("Generation error:", err);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
 
   const handleDownload = async (clip: SunoClip) => {
     if (!clip.audio_url || isDownloading[clip.id]) return;
@@ -88,6 +67,199 @@ export default function MusicGenerator() {
       link.click();
     } finally {
       setIsDownloading((prev) => ({ ...prev, [clip.id]: false }));
+    }
+  };
+
+  // Check for OAuth callback tokens on page load and restore from localStorage
+  useEffect(() => {
+    // First, check localStorage for existing tokens
+    const storedSpotifyToken = localStorage.getItem('spotify_access_token');
+    const storedGmailToken = localStorage.getItem('gmail_access_token');
+
+    if (storedSpotifyToken) {
+      setSpotifyToken(storedSpotifyToken);
+      setIsSpotifyConnected(true);
+    }
+    if (storedGmailToken) {
+      setGmailToken(storedGmailToken);
+      setIsGmailConnected(true);
+    }
+
+    // Then check URL parameters for new tokens
+    const urlParams = new URLSearchParams(window.location.search);
+    const spotifyAccessToken = urlParams.get('spotify_access_token');
+    const gmailAccessToken = urlParams.get('gmail_access_token');
+
+    if (spotifyAccessToken) {
+      setSpotifyToken(spotifyAccessToken);
+      setIsSpotifyConnected(true);
+      localStorage.setItem('spotify_access_token', spotifyAccessToken);
+    }
+    if (gmailAccessToken) {
+      setGmailToken(gmailAccessToken);
+      setIsGmailConnected(true);
+      localStorage.setItem('gmail_access_token', gmailAccessToken);
+    }
+
+    if (spotifyAccessToken || gmailAccessToken) {
+      // Clean URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  const handleSpotifyLogin = async () => {
+    if (isSpotifyConnected) return;
+    setIsSpotifyConnecting(true);
+    window.location.href = '/api/spotify/auth';
+  };
+
+  const handleSpotifyDisconnect = async () => {
+    setSpotifyToken(null);
+    setIsSpotifyConnected(false);
+    localStorage.removeItem('spotify_access_token');
+
+    // Clear Spotify OAuth session by making a request to revoke endpoint
+    try {
+      if (spotifyToken) {
+        await fetch('https://accounts.spotify.com/api/revoke', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            token: spotifyToken,
+          })
+        });
+      }
+    } catch (error) {
+      console.log('Error revoking Spotify token:', error);
+    }
+
+    // Clear all Spotify-related cookies and session data
+    document.cookie.split(";").forEach((c) => {
+      const eqPos = c.indexOf("=");
+      const name = eqPos > -1 ? c.substring(0, eqPos) : c;
+      if (name.trim().toLowerCase().includes('spotify')) {
+        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+      }
+    });
+  };
+
+  const handleGmailLogin = async () => {
+    if (isGmailConnected) return;
+    setIsGmailConnecting(true);
+    window.location.href = '/api/gmail/auth';
+  };
+
+  const handleGmailDisconnect = async () => {
+    setGmailToken(null);
+    setIsGmailConnected(false);
+    localStorage.removeItem('gmail_access_token');
+
+    // Clear Gmail OAuth session by revoking the token
+    try {
+      if (gmailToken) {
+        await fetch(`https://oauth2.googleapis.com/revoke?token=${gmailToken}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          }
+        });
+      }
+    } catch (error) {
+      console.log('Error revoking Gmail token:', error);
+    }
+
+    // Clear all Google-related cookies and session data
+    document.cookie.split(";").forEach((c) => {
+      const eqPos = c.indexOf("=");
+      const name = eqPos > -1 ? c.substring(0, eqPos) : c;
+      if (name.trim().toLowerCase().includes('google') || name.trim().toLowerCase().includes('gmail')) {
+        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+      }
+    });
+  };
+
+  const handleGenerateFromLife = async () => {
+    if (!isSpotifyConnected || !isGmailConnected) {
+      setError('Please connect both Spotify and Gmail first');
+      return;
+    }
+
+    setIsGeneratingFromLife(true);
+    setIsComplete(false);
+    setGeneratedClips([]);
+    setError(null);
+
+    try {
+      setLifeGenerationStatus("Fetching your music preferences...");
+
+      const spotifyResponse = await fetch('/api/spotify/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: spotifyToken })
+      });
+
+      const spotifyData = spotifyResponse.ok ? await spotifyResponse.json() : null;
+
+      setLifeGenerationStatus("Fetching your recent emails...");
+
+      const gmailResponse = await fetch('/api/gmail/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: gmailToken })
+      });
+
+      const gmailData = gmailResponse.ok ? await gmailResponse.json() : null;
+
+      setLifeGenerationStatus("Creating your personalized song prompt...");
+
+      // Generate personalized prompt using Claude
+      const promptResponse = await fetch('/api/generate-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          spotifyData: spotifyData?.data,
+          gmailData: gmailData?.data
+        })
+      });
+
+      if (!promptResponse.ok) {
+        throw new Error('Failed to generate personalized prompt');
+      }
+
+      const promptData = await promptResponse.json();
+
+      // Store the generated prompt for display
+      setGeneratedPrompt(promptData.prompt);
+      setGeneratedTags(promptData.tags);
+
+      setLifeGenerationStatus("Generating your personalized song...");
+
+      // Directly generate the song with Suno API
+      const clips = await SunoService.generateAndWaitForCompletion(
+        {
+          prompt: promptData.prompt,
+          tags: promptData.tags || undefined,
+          makeInstrumental: false,
+        },
+        (clips) => {
+          if (clips && clips.length > 0) {
+            setGeneratedClips(clips);
+          }
+        }
+      );
+
+      setGeneratedClips(clips);
+      setIsComplete(true);
+      setLifeGenerationStatus("");
+
+    } catch (error) {
+      console.error('Generate from life error:', error);
+      setError(error instanceof Error ? error.message : 'Failed to generate personalized song');
+      setLifeGenerationStatus("");
+    } finally {
+      setIsGeneratingFromLife(false);
     }
   };
 
@@ -299,66 +471,142 @@ export default function MusicGenerator() {
           {/* Main Interface */}
           <Card className="p-8 backdrop-blur-sm bg-card/80 border-border/50 shadow-xl">
             <div className="space-y-6">
-              {/* Text Input */}
+
+              {/* OAuth Connections */}
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <label
-                    htmlFor="prompt"
-                    className="text-md font-medium text-foreground"
+
+                {/* Spotify Login */}
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleSpotifyLogin}
+                    disabled={isSpotifyConnected || isSpotifyConnecting}
+                    size="lg"
+                    variant={isSpotifyConnected ? "default" : "outline"}
+                    className={`flex-1 h-12 text-base font-semibold ${
+                      isSpotifyConnected
+                        ? "bg-green-600 hover:bg-green-700 text-white"
+                        : "border-2 border-green-500/20 hover:border-green-500/40 hover:bg-green-500/5"
+                    }`}
                   >
-                    Describe your song!
-                  </label>
-                  <Textarea
-                    id="prompt"
-                    placeholder="An upbeat pop song about summer adventures with electric guitar and synths..."
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    className="min-h-[120px] resize-none text-base mt-4 border border-red-200 rounded-lg p-4"
-                    disabled={isGenerating}
-                  />
+                    {isSpotifyConnecting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin mr-2" />
+                        Connecting to Spotify...
+                      </>
+                    ) : isSpotifyConnected ? (
+                      <>
+                        ✅ Spotify Connected
+                      </>
+                    ) : (
+                      <>
+                        🎵 Connect Spotify
+                      </>
+                    )}
+                  </Button>
+                  {isSpotifyConnected && (
+                    <Button
+                      onClick={handleSpotifyDisconnect}
+                      size="lg"
+                      variant="outline"
+                      className="h-12 px-4 border-2 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/5 text-red-600"
+                    >
+                      ❌
+                    </Button>
+                  )}
                 </div>
 
-                <div className="space-y-2">
-                  <label
-                    htmlFor="tags"
-                    className="text-md font-medium text-foreground"
+                {/* Gmail Login */}
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleGmailLogin}
+                    disabled={isGmailConnected || isGmailConnecting}
+                    size="lg"
+                    variant={isGmailConnected ? "default" : "outline"}
+                    className={`flex-1 h-12 text-base font-semibold ${
+                      isGmailConnected
+                        ? "bg-blue-600 hover:bg-blue-700 text-white"
+                        : "border-2 border-blue-500/20 hover:border-blue-500/40 hover:bg-blue-500/5"
+                    }`}
                   >
-                    Style tags (optional)
-                  </label>
-                  <Textarea
-                    id="tags"
-                    placeholder="pop, electronic, guitar, upbeat..."
-                    value={tags}
-                    onChange={(e) => setTags(e.target.value)}
-                    className="min-h-[80px] resize-none text-base mt-2 border border-red-200 rounded-lg p-4"
-                    disabled={isGenerating}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Specify genres, instruments, and moods (e.g., "rock,
-                    electric guitar, energetic")
-                  </p>
+                    {isGmailConnecting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin mr-2" />
+                        Connecting to Gmail...
+                      </>
+                    ) : isGmailConnected ? (
+                      <>
+                        ✅ Gmail Connected
+                      </>
+                    ) : (
+                      <>
+                        📧 Connect Gmail
+                      </>
+                    )}
+                  </Button>
+                  {isGmailConnected && (
+                    <Button
+                      onClick={handleGmailDisconnect}
+                      size="lg"
+                      variant="outline"
+                      className="h-12 px-4 border-2 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/5 text-red-600"
+                    >
+                      ❌
+                    </Button>
+                  )}
                 </div>
+
+                {/* Generate from Life Button */}
+                {isSpotifyConnected && isGmailConnected && (
+                  <Button
+                    onClick={handleGenerateFromLife}
+                    disabled={isGenerating || isGeneratingFromLife}
+                    size="lg"
+                    className="w-full h-12 text-base font-semibold bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white"
+                  >
+                    {isGeneratingFromLife ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                        {lifeGenerationStatus || "Generating..."}
+                      </>
+                    ) : (
+                      <>
+                        <Heart className="w-5 h-5 mr-2" />
+                        Generate My Life Song
+                      </>
+                    )}
+                  </Button>
+                )}
+
+                <p className="text-xs text-muted-foreground text-center">
+                  {!isSpotifyConnected && !isGmailConnected
+                    ? "Connect both services to create a song inspired by your music taste and recent life events"
+                    : !isSpotifyConnected
+                    ? "Connect Spotify to complete the setup"
+                    : !isGmailConnected
+                    ? "Connect Gmail to complete the setup"
+                    : "Ready to generate your personalized song!"}
+                </p>
+
+                {/* Display Generated Prompt */}
+                {generatedPrompt && (
+                  <div className="mt-6 p-4 bg-slate-50 rounded-lg border">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-2">Generated Prompt for Suno AI:</h3>
+                    <p className="text-sm text-slate-600 mb-2">"<em>{generatedPrompt}</em>"</p>
+                    {generatedTags && (
+                      <p className="text-xs text-slate-500">Tags: {generatedTags}</p>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Generate Button */}
-              <Button
-                onClick={handleGenerate}
-                disabled={!prompt.trim() || isGenerating}
-                size="lg"
-                className="w-full h-12 text-base font-semibold btn-primary-darker-hover"
-              >
-                {isGenerating ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-2" />
-                    Generating Music...
-                  </>
-                ) : (
-                  <>
-                    <Music className="w-5 h-5 mr-2" />
-                    Generate Song
-                  </>
-                )}
-              </Button>
+              {/* Life Generation Status */}
+              {lifeGenerationStatus && (
+                <div className="text-center">
+                  <p className="text-sm text-primary font-medium">
+                    {lifeGenerationStatus}
+                  </p>
+                </div>
+              )}
 
               {/* Status Display */}
               {isGenerating && generatedClips.length > 0 && (
