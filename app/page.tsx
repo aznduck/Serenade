@@ -2,15 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { Download, Music, Sparkles, Play, Pause, Heart, User } from "lucide-react";
+import { Download, Music, Sparkles, Play, Pause, Heart } from "lucide-react";
 import { SunoService, SunoClip } from "@/lib/suno-service";
+import InlineProcessing, { ProcessingState } from "@/components/InlineProcessing";
 
 export default function MusicGenerator() {
   const [generatedPrompt, setGeneratedPrompt] = useState("");
   const [generatedTags, setGeneratedTags] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [generatedClips, setGeneratedClips] = useState<SunoClip[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +37,16 @@ export default function MusicGenerator() {
 
   // Generate from My Life state
   const [isGeneratingFromLife, setIsGeneratingFromLife] = useState(false);
-  const [lifeGenerationStatus, setLifeGenerationStatus] = useState<string>("");
+
+  // Processing Modal state
+  const [processingState, setProcessingState] = useState<ProcessingState>({
+    currentStep: 'gmail',
+    currentSubStep: '',
+    progress: 0,
+    isProcessing: false,
+    data: {}
+  });
+  const [isProcessingVisible, setIsProcessingVisible] = useState(false);
 
 
   const handleDownload = async (clip: SunoClip) => {
@@ -180,29 +188,38 @@ export default function MusicGenerator() {
     });
   };
 
+  const updateProcessingState = (updates: Partial<ProcessingState>) => {
+    setProcessingState(prev => ({ ...prev, ...updates }));
+  };
+
   const handleGenerateFromLife = async () => {
     if (!isSpotifyConnected || !isGmailConnected) {
       setError('Please connect both Spotify and Gmail first');
       return;
     }
 
+    // Initialize processing view
+    setIsProcessingVisible(true);
     setIsGeneratingFromLife(true);
     setIsComplete(false);
     setGeneratedClips([]);
     setError(null);
 
+    updateProcessingState({
+      currentStep: 'gmail',
+      currentSubStep: '',
+      progress: 0,
+      isProcessing: true,
+      data: {}
+    });
+
     try {
-      setLifeGenerationStatus("Fetching your music preferences...");
-
-      const spotifyResponse = await fetch('/api/spotify/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessToken: spotifyToken })
+      // STEP 1: Gmail Data Collection
+      updateProcessingState({
+        currentStep: 'gmail',
+        currentSubStep: 'Fetching recent messages...',
+        progress: 5
       });
-
-      const spotifyData = spotifyResponse.ok ? await spotifyResponse.json() : null;
-
-      setLifeGenerationStatus("Fetching your recent emails...");
 
       const gmailResponse = await fetch('/api/gmail/data', {
         method: 'POST',
@@ -212,9 +229,50 @@ export default function MusicGenerator() {
 
       const gmailData = gmailResponse.ok ? await gmailResponse.json() : null;
 
-      setLifeGenerationStatus("Creating your personalized song prompt...");
+      if (gmailData?.data?.recentEmails) {
+        const subjects = gmailData.data.recentEmails.map((email: any) => email.subject);
+        updateProcessingState({
+          currentSubStep: `Processing ${gmailData.data.count} messages...`,
+          progress: 15,
+          data: { gmailPreview: subjects }
+        });
+      }
 
-      // Generate personalized prompt using Claude
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Show preview
+
+      // STEP 2: Spotify Data Collection
+      updateProcessingState({
+        currentStep: 'spotify',
+        currentSubStep: 'Loading top artists...',
+        progress: 25
+      });
+
+      const spotifyResponse = await fetch('/api/spotify/data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken: spotifyToken })
+      });
+
+      const spotifyData = spotifyResponse.ok ? await spotifyResponse.json() : null;
+
+      if (spotifyData?.data?.topArtists) {
+        const artists = spotifyData.data.topArtists.map((artist: any) => artist.name);
+        updateProcessingState({
+          currentSubStep: 'Loading top tracks...',
+          progress: 40,
+          data: { ...processingState.data, spotifyPreview: artists }
+        });
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Show preview
+
+      // STEP 3: Claude Prompt Generation
+      updateProcessingState({
+        currentStep: 'claude',
+        currentSubStep: 'Analyzing your data...',
+        progress: 55
+      });
+
       const promptResponse = await fetch('/api/generate-prompt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -230,14 +288,27 @@ export default function MusicGenerator() {
 
       const promptData = await promptResponse.json();
 
+      updateProcessingState({
+        currentSubStep: 'Generating personalized prompt...',
+        progress: 70,
+        data: { ...processingState.data, generatedPrompt: promptData.prompt }
+      });
+
       // Store the generated prompt for display
       setGeneratedPrompt(promptData.prompt);
       setGeneratedTags(promptData.tags);
 
-      setLifeGenerationStatus("Generating your personalized song...");
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Show typing effect
 
-      // Directly generate the song with Suno API
-      const clips = await SunoService.generateAndWaitForCompletion(
+      // STEP 4: Suno Generation (Non-blocking)
+      updateProcessingState({
+        currentStep: 'suno',
+        currentSubStep: 'Sending prompt to Suno AI...',
+        progress: 80
+      });
+
+      // Start Suno generation but don't wait for completion
+      SunoService.generateAndWaitForCompletion(
         {
           prompt: promptData.prompt,
           tags: promptData.tags || undefined,
@@ -246,21 +317,65 @@ export default function MusicGenerator() {
         (clips) => {
           if (clips && clips.length > 0) {
             setGeneratedClips(clips);
+            // Check if any clips are available for streaming
+            const hasStreamingClips = clips.some(clip =>
+              clip.status === 'streaming' && clip.audio_url
+            );
+            if (hasStreamingClips) {
+              setIsComplete(true);
+            }
           }
         }
-      );
+      ).then((finalClips) => {
+        setGeneratedClips(finalClips);
+        setIsComplete(true);
+      }).catch((error) => {
+        console.error('Suno generation error:', error);
+        setError(error instanceof Error ? error.message : 'Failed to generate song');
+      });
 
-      setGeneratedClips(clips);
-      setIsComplete(true);
-      setLifeGenerationStatus("");
+      // Update to show Suno started, then auto-complete the processing view
+      updateProcessingState({
+        currentSubStep: 'AI composing your song... You can return to the main page!',
+        progress: 85
+      });
+
+      // Auto-complete after a short delay to let user see Suno started
+      setTimeout(() => {
+        updateProcessingState({
+          currentStep: 'complete',
+          currentSubStep: 'Song generation in progress...',
+          progress: 100
+        });
+      }, 2000);
 
     } catch (error) {
       console.error('Generate from life error:', error);
-      setError(error instanceof Error ? error.message : 'Failed to generate personalized song');
-      setLifeGenerationStatus("");
+      const errorMessage = error instanceof Error ? error.message : 'Failed to generate personalized song';
+      setError(errorMessage);
+      updateProcessingState({
+        data: { ...processingState.data, error: errorMessage }
+      });
     } finally {
       setIsGeneratingFromLife(false);
     }
+  };
+
+  const handleCancelProcessing = () => {
+    setIsProcessingVisible(false);
+    setIsGeneratingFromLife(false);
+    updateProcessingState({
+      isProcessing: false,
+      currentStep: 'gmail',
+      currentSubStep: '',
+      progress: 0,
+      data: {}
+    });
+  };
+
+  const handleCompleteProcessing = () => {
+    setIsProcessingVisible(false);
+    setIsGeneratingFromLife(false);
   };
 
   const refreshAudioMetadata = (clip: SunoClip) => {
@@ -559,14 +674,14 @@ export default function MusicGenerator() {
                 {isSpotifyConnected && isGmailConnected && (
                   <Button
                     onClick={handleGenerateFromLife}
-                    disabled={isGenerating || isGeneratingFromLife}
+                    disabled={isGeneratingFromLife}
                     size="lg"
                     className="w-full h-12 text-base font-semibold bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white"
                   >
                     {isGeneratingFromLife ? (
                       <>
                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                        {lifeGenerationStatus || "Generating..."}
+                        Generating...
                       </>
                     ) : (
                       <>
@@ -599,23 +714,14 @@ export default function MusicGenerator() {
                 )}
               </div>
 
-              {/* Life Generation Status */}
-              {lifeGenerationStatus && (
-                <div className="text-center">
-                  <p className="text-sm text-primary font-medium">
-                    {lifeGenerationStatus}
-                  </p>
-                </div>
-              )}
-
-              {/* Status Display */}
-              {isGenerating && generatedClips.length > 0 && (
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">
-                    Status:{" "}
-                    {generatedClips.map((clip) => clip.status).join(", ")}
-                  </p>
-                </div>
+              {/* Inline Processing View */}
+              {isProcessingVisible && (
+                <InlineProcessing
+                  isVisible={isProcessingVisible}
+                  processingState={processingState}
+                  onCancel={handleCancelProcessing}
+                  onComplete={handleCompleteProcessing}
+                />
               )}
 
               {/* Error Display */}
@@ -940,6 +1046,7 @@ export default function MusicGenerator() {
           </p>
         </div>
       </div>
+
     </div>
   );
 }
