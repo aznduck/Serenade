@@ -276,15 +276,31 @@ export default function MusicGenerator() {
         progress: 40
       });
 
+      console.log('[Frontend] Fetching Spotify data with token:', spotifyToken?.substring(0, 20) + '...');
       const spotifyResponse = await fetch("/api/spotify/data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accessToken: spotifyToken }),
       });
 
-      const spotifyData = spotifyResponse.ok
-        ? await spotifyResponse.json()
-        : null;
+      console.log(`[Frontend] Spotify API response: ${spotifyResponse.status} ${spotifyResponse.statusText}`);
+
+      let spotifyData = null;
+      if (spotifyResponse.ok) {
+        spotifyData = await spotifyResponse.json();
+        console.log('[Frontend] Spotify data fetched successfully');
+      } else {
+        const errorText = await spotifyResponse.text();
+        console.error(`[Frontend] Spotify API failed: ${spotifyResponse.status} - ${errorText}`);
+        if (spotifyResponse.status === 403) {
+          console.error('[Frontend] 403 Forbidden - likely token expired or insufficient scopes');
+        } else if (spotifyResponse.status === 401) {
+          console.error('[Frontend] 401 Unauthorized - token invalid or malformed');
+        } else if (spotifyResponse.status === 429) {
+          console.error('[Frontend] 429 Rate Limited - too many requests');
+        }
+        spotifyData = null;
+      }
 
       if (spotifyData?.data?.topArtists) {
         const artists = spotifyData.data.topArtists.map(
