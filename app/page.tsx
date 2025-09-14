@@ -226,28 +226,33 @@ export default function MusicGenerator() {
 
     try {
       console.log(`[Frontend] Starting transcription for clip: ${clip.id}`);
-      const response = await fetch('/api/transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ audioUrl: clip.audio_url }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        setTranscriptions((prev) => ({ ...prev, [clip.id]: data.transcription }));
-        console.log(`[Frontend] Transcription completed for clip: ${clip.id}`);
-      } else {
-        console.error(`[Frontend] Transcription failed: ${response.statusText}`);
         setTranscriptions((prev) => ({
           ...prev,
-          [clip.id]: "Transcription failed - please try again later"
+          [clip.id]: data.transcription,
+        }));
+        console.log(`[Frontend] Transcription completed for clip: ${clip.id}`);
+      } else {
+        console.error(
+          `[Frontend] Transcription failed: ${response.statusText}`
+        );
+        setTranscriptions((prev) => ({
+          ...prev,
+          [clip.id]: "Transcription failed - please try again later",
         }));
       }
     } catch (error) {
       console.error(`[Frontend] Transcription error:`, error);
       setTranscriptions((prev) => ({
         ...prev,
-        [clip.id]: "Transcription failed - please try again later"
+        [clip.id]: "Transcription failed - please try again later",
       }));
     } finally {
       setIsTranscribing((prev) => ({ ...prev, [clip.id]: false }));
@@ -413,8 +418,8 @@ export default function MusicGenerator() {
         body: JSON.stringify({
           spotifyData: spotifyData?.data,
           gmailData: gmailData?.data,
-          includeMessages: isMessagesEnabled
-        })
+          includeMessages: isMessagesEnabled,
+        }),
       });
 
       if (!promptResponse.ok) {
@@ -458,6 +463,9 @@ export default function MusicGenerator() {
             );
             if (hasStreamingClips) {
               setIsComplete(true);
+              // Auto-close processing modal when first song is ready
+              setIsProcessingVisible(false);
+              setIsGeneratingFromLife(false);
             }
           }
         }
@@ -465,6 +473,9 @@ export default function MusicGenerator() {
         .then((finalClips) => {
           setGeneratedClips(finalClips);
           setIsComplete(true);
+          // Ensure processing modal is closed when generation fully completes
+          setIsProcessingVisible(false);
+          setIsGeneratingFromLife(false);
         })
         .catch((error) => {
           console.error("Suno generation error:", error);
@@ -767,9 +778,6 @@ export default function MusicGenerator() {
                     <h2 className="text-3xl font-semibold text-white mb-3">
                       Connect Your Digital Life
                     </h2>
-                    <p className="text-lg text-gray-300">
-                      Link your accounts to create a truly personalized song
-                    </p>
                   </div>
 
                   {/* Connection Grid */}
@@ -800,7 +808,9 @@ export default function MusicGenerator() {
                     <div className="space-y-4">
                       <IMessageToggle
                         isEnabled={isMessagesEnabled}
-                        onToggle={() => setIsMessagesEnabled(!isMessagesEnabled)}
+                        onToggle={() =>
+                          setIsMessagesEnabled(!isMessagesEnabled)
+                        }
                         size={32}
                       />
                     </div>
@@ -916,9 +926,6 @@ export default function MusicGenerator() {
                       Your Serenade
                       {generatedClips.length > 1 ? "s are" : " is"} Ready!
                     </h3>
-                    <p className="text-xl text-gray-300">
-                      Your personalized musical journey awaits
-                    </p>
                   </div>
                 )}
 
@@ -1265,7 +1272,9 @@ export default function MusicGenerator() {
                                     <div className="glass p-4 rounded-xl bg-blue-400/5 border border-blue-400/20">
                                       <div className="flex items-center gap-3">
                                         <div className="w-5 h-5 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
-                                        <p className="text-blue-300">Transcribing lyrics...</p>
+                                        <p className="text-blue-300">
+                                          Transcribing lyrics...
+                                        </p>
                                       </div>
                                     </div>
                                   ) : transcriptions[clip.id] ? (
@@ -1277,7 +1286,8 @@ export default function MusicGenerator() {
                                   ) : (
                                     <div className="glass p-4 rounded-xl bg-gray-500/5 border border-gray-500/20">
                                       <p className="text-gray-400 italic">
-                                        Lyrics will appear automatically once transcription completes
+                                        Lyrics will appear automatically once
+                                        transcription completes
                                       </p>
                                     </div>
                                   )}
