@@ -4,6 +4,9 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Download, Music, Sparkles, Play, Pause, Heart } from "lucide-react";
+import { SpotifyLogo } from "@/components/ui/SpotifyLogo";
+import { GmailLogo } from "@/components/ui/GmailLogo";
+import { IMessageToggle } from "@/components/ui/iMessageToggle";
 import { SunoService, SunoClip } from "@/lib/suno-service";
 import InlineProcessing, {
   ProcessingState,
@@ -37,6 +40,9 @@ export default function MusicGenerator() {
   const [isGmailConnected, setIsGmailConnected] = useState(false);
   const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
   const [isGmailConnecting, setIsGmailConnecting] = useState(false);
+
+  // iMessage state
+  const [isMessagesEnabled, setIsMessagesEnabled] = useState(true);
 
   // Generate from My Life state
   const [isGeneratingFromLife, setIsGeneratingFromLife] = useState(false);
@@ -361,9 +367,8 @@ export default function MusicGenerator() {
         body: JSON.stringify({
           spotifyData: spotifyData?.data,
           gmailData: gmailData?.data,
-          iMessageData: iMessageData?.data,
-          includeMessages: true,
-        }),
+          includeMessages: isMessagesEnabled
+        })
       });
 
       if (!promptResponse.ok) {
@@ -647,7 +652,7 @@ export default function MusicGenerator() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-800 via-slate-700 to-gray-800 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-900 to-black relative overflow-hidden">
       {/* Animated background elements with teal presence */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Teal accent shapes */}
@@ -722,105 +727,36 @@ export default function MusicGenerator() {
                   </div>
 
                   {/* Connection Grid */}
-                  <div className="grid md:grid-cols-2 gap-8">
+                  <div className="grid md:grid-cols-3 gap-8">
                     {/* Spotify Login */}
                     <div className="space-y-4">
-                      <div className="flex items-center gap-3 mb-2">
-                        <Music className="w-6 h-6 text-green-400" />
-                        <h3 className="text-xl font-semibold text-white">
-                          Spotify
-                        </h3>
-                      </div>
-                      <div className="flex gap-3">
-                        <Button
-                          onClick={handleSpotifyLogin}
-                          disabled={isSpotifyConnected || isSpotifyConnecting}
-                          size="lg"
-                          className={`flex-1 h-16 text-lg font-semibold rounded-2xl transition-all duration-300 ${
-                            isSpotifyConnected
-                              ? "surface-3 border-2 border-green-500/40 text-green-400 shadow-lg hover:shadow-green-500/20"
-                              : "surface-1 border-2 border-green-500/30 hover:border-green-400/50 hover:bg-green-500/5 text-green-400 hover-lift"
-                          }`}
-                        >
-                          {isSpotifyConnecting ? (
-                            <>
-                              <div className="w-5 h-5 border-2 border-current/30 border-t-current rounded-full animate-spin mr-3" />
-                              Connecting...
-                            </>
-                          ) : isSpotifyConnected ? (
-                            <>
-                              <div className="w-6 h-6 mr-3 bg-green-500/20 rounded-full flex items-center justify-center border border-green-400/40">
-                                ✓
-                              </div>
-                              Connected
-                            </>
-                          ) : (
-                            <>
-                              <Music className="w-5 h-5 mr-3" />
-                              Connect Spotify
-                            </>
-                          )}
-                        </Button>
-                        {isSpotifyConnected && (
-                          <Button
-                            onClick={handleSpotifyDisconnect}
-                            size="lg"
-                            className="h-16 px-5 surface-1 border-2 border-red-500/30 hover:border-red-400/50 hover:bg-red-500/5 text-red-400 rounded-2xl hover-lift"
-                          >
-                            <span className="text-xl">×</span>
-                          </Button>
-                        )}
-                      </div>
+                      <SpotifyLogo
+                        isConnected={isSpotifyConnected}
+                        isConnecting={isSpotifyConnecting}
+                        onConnect={handleSpotifyLogin}
+                        onDisconnect={handleSpotifyDisconnect}
+                        size={32}
+                      />
                     </div>
 
                     {/* Gmail Login */}
                     <div className="space-y-4">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="text-2xl">📧</span>
-                        <h3 className="text-xl font-semibold text-white">
-                          Gmail
-                        </h3>
-                      </div>
-                      <div className="flex gap-3">
-                        <Button
-                          onClick={handleGmailLogin}
-                          disabled={isGmailConnected || isGmailConnecting}
-                          size="lg"
-                          className={`flex-1 h-16 text-lg font-semibold rounded-2xl transition-all duration-300 ${
-                            isGmailConnected
-                              ? "surface-3 border-2 border-blue-500/40 text-blue-400 shadow-lg hover:shadow-blue-500/20"
-                              : "surface-1 border-2 border-blue-500/30 hover:border-blue-400/50 hover:bg-blue-500/5 text-blue-400 hover-lift"
-                          }`}
-                        >
-                          {isGmailConnecting ? (
-                            <>
-                              <div className="w-5 h-5 border-2 border-current/30 border-t-current rounded-full animate-spin mr-3" />
-                              Connecting...
-                            </>
-                          ) : isGmailConnected ? (
-                            <>
-                              <div className="w-6 h-6 mr-3 bg-blue-500/20 rounded-full flex items-center justify-center border border-blue-400/40">
-                                ✓
-                              </div>
-                              Connected
-                            </>
-                          ) : (
-                            <>
-                              <span className="text-lg mr-3">📧</span>
-                              Connect Gmail
-                            </>
-                          )}
-                        </Button>
-                        {isGmailConnected && (
-                          <Button
-                            onClick={handleGmailDisconnect}
-                            size="lg"
-                            className="h-16 px-5 surface-1 border-2 border-red-500/30 hover:border-red-400/50 hover:bg-red-500/5 text-red-400 rounded-2xl hover-lift"
-                          >
-                            <span className="text-xl">×</span>
-                          </Button>
-                        )}
-                      </div>
+                      <GmailLogo
+                        isConnected={isGmailConnected}
+                        isConnecting={isGmailConnecting}
+                        onConnect={handleGmailLogin}
+                        onDisconnect={handleGmailDisconnect}
+                        size={32}
+                      />
+                    </div>
+
+                    {/* iMessage Toggle */}
+                    <div className="space-y-4">
+                      <IMessageToggle
+                        isEnabled={isMessagesEnabled}
+                        onToggle={() => setIsMessagesEnabled(!isMessagesEnabled)}
+                        size={32}
+                      />
                     </div>
                   </div>
 
@@ -831,19 +767,19 @@ export default function MusicGenerator() {
                         onClick={handleGenerateFromLife}
                         disabled={isGeneratingFromLife}
                         size="lg"
-                        className="w-full h-20 text-2xl font-bold rounded-3xl surface-1 border-2 border-teal-500/40 hover:border-teal-400/60 hover:bg-teal-500/10 text-teal-400 shadow-2xl hover:shadow-teal-500/20 transition-all duration-500 hover:scale-105"
+                        className="w-full h-20 text-2xl font-bold rounded-3xl surface-1 border-2 border-teal-500/40 hover:border-teal-400/60 hover:bg-teal-500/10 text-white shadow-2xl hover:shadow-teal-500/20 transition-all duration-500 hover:scale-105"
                       >
                         {isGeneratingFromLife ? (
                           <>
                             <div className="w-6 h-6 border-2 border-current/30 border-t-current rounded-full animate-spin mr-3" />
-                            <span className="text-teal-300">
+                            <span className="text-white">
                               Creating Your Serenade...
                             </span>
                           </>
                         ) : (
                           <>
                             <Heart className="w-8 h-8 mr-4 text-teal-400" />
-                            <span className="bg-gradient-to-r from-blue-400 to-teal-400 bg-clip-text text-transparent">
+                            <span className="text-white">
                               Create My Serenade
                             </span>
                           </>
@@ -874,9 +810,11 @@ export default function MusicGenerator() {
                         </h3>
                       </div>
                       <div className="space-y-4">
-                        <p className="text-gray-200 italic text-lg leading-relaxed">
-                          "{generatedPrompt}"
-                        </p>
+                        <div className="max-h-none overflow-visible">
+                          <p className="text-gray-200 italic text-lg leading-relaxed whitespace-pre-wrap break-words">
+                            "{generatedPrompt}"
+                          </p>
+                        </div>
                         {generatedTags && (
                           <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-600/30">
                             <span className="text-sm text-teal-400 font-semibold">
@@ -1229,7 +1167,7 @@ export default function MusicGenerator() {
                                     clip.status === "streaming" ||
                                     isDownloading[clip.id]
                                       ? "glass border-2 border-gray-400/30 text-gray-400"
-                                      : "glass border-2 border-teal-400/30 hover:border-teal-400/60 text-teal-400 hover:bg-teal-400/10 hover-lift shadow-lg hover:shadow-teal-400/25"
+                                      : "glass border-2 border-teal-400/30 hover:border-teal-400/60 text-white hover:bg-teal-400/10 hover-lift shadow-lg hover:shadow-teal-400/25"
                                   }`}
                                   disabled={
                                     isDownloading[clip.id] ||

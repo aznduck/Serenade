@@ -10,18 +10,18 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-gradient-to-r from-blue-500 to-teal-500 text-white shadow-lg hover:shadow-xl hover:shadow-blue-500/30 hover:from-blue-600 hover:to-teal-600",
+          "bg-gradient-to-r from-blue-600 to-teal-600 text-white shadow-lg hover:shadow-xl hover:shadow-blue-500/20 hover:from-blue-700 hover:to-teal-700",
         destructive:
-          "bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg hover:shadow-xl hover:shadow-red-500/30 hover:from-red-600 hover:to-red-700",
+          "bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg hover:shadow-xl hover:shadow-red-500/20 hover:from-red-700 hover:to-red-800",
         outline:
-          "glass border-2 border-blue-400/30 hover:border-blue-400/60 hover:bg-blue-400/10 text-blue-400 backdrop-blur-sm",
+          "glass border-2 border-blue-400/30 hover:border-blue-400/60 hover:bg-blue-400/10 text-white backdrop-blur-sm",
         secondary:
-          "bg-gradient-to-r from-teal-400/20 to-blue-400/20 text-teal-300 border border-teal-400/30 hover:bg-gradient-to-r hover:from-teal-400/30 hover:to-blue-400/30 backdrop-blur-sm",
+          "bg-gradient-to-r from-teal-500/30 to-blue-500/30 text-white border border-teal-400/30 hover:bg-gradient-to-r hover:from-teal-500/40 hover:to-blue-500/40 backdrop-blur-sm",
         ghost:
-          "hover:bg-blue-400/10 hover:text-blue-300 text-blue-200/80",
-        link: "text-blue-400 underline-offset-4 hover:underline hover:text-teal-400",
+          "hover:bg-blue-400/10 hover:text-white text-white/80",
+        link: "text-white underline-offset-4 hover:underline hover:text-teal-300",
         glass:
-          "glass border-2 border-white/10 hover:border-white/20 text-white/90 hover:bg-white/5",
+          "glass border-2 border-white/10 hover:border-white/20 text-white hover:bg-white/5",
       },
       size: {
         default: "h-10 px-4 py-2 has-[>svg]:px-3 text-sm",
