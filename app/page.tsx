@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Download, Music, Sparkles, Play, Pause, Heart } from "lucide-react";
@@ -32,6 +32,15 @@ export default function MusicGenerator() {
   const [isDownloading, setIsDownloading] = useState<{
     [key: string]: boolean;
   }>({});
+  const [transcriptions, setTranscriptions] = useState<{
+    [key: string]: string;
+  }>({});
+  const [isTranscribing, setIsTranscribing] = useState<{
+    [key: string]: boolean;
+  }>({});
+
+  // Track which clips have had transcription initiated to prevent duplicates
+  const transcriptionInitiated = useRef<Set<string>>(new Set());
 
   // OAuth state
   const [spotifyToken, setSpotifyToken] = useState<string | null>(null);
@@ -206,6 +215,43 @@ export default function MusicGenerator() {
 
   const updateProcessingState = (updates: Partial<ProcessingState>) => {
     setProcessingState((prev) => ({ ...prev, ...updates }));
+  };
+
+  const transcribeAudio = async (clip: SunoClip) => {
+    if (!clip.audio_url || isTranscribing[clip.id] || transcriptions[clip.id]) {
+      return;
+    }
+
+    setIsTranscribing((prev) => ({ ...prev, [clip.id]: true }));
+
+    try {
+      console.log(`[Frontend] Starting transcription for clip: ${clip.id}`);
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioUrl: clip.audio_url }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTranscriptions((prev) => ({ ...prev, [clip.id]: data.transcription }));
+        console.log(`[Frontend] Transcription completed for clip: ${clip.id}`);
+      } else {
+        console.error(`[Frontend] Transcription failed: ${response.statusText}`);
+        setTranscriptions((prev) => ({
+          ...prev,
+          [clip.id]: "Transcription failed - please try again later"
+        }));
+      }
+    } catch (error) {
+      console.error(`[Frontend] Transcription error:`, error);
+      setTranscriptions((prev) => ({
+        ...prev,
+        [clip.id]: "Transcription failed - please try again later"
+      }));
+    } finally {
+      setIsTranscribing((prev) => ({ ...prev, [clip.id]: false }));
+    }
   };
 
   const handleGenerateFromLife = async () => {
@@ -893,6 +939,18 @@ export default function MusicGenerator() {
                         setTimeout(() => refreshAudioMetadata(clip), 100);
                       }
 
+                      // Auto-transcribe when song is complete and audio_url is available (once per song)
+                      if (
+                        clip.status === "complete" &&
+                        clip.audio_url &&
+                        !transcriptions[clip.id] &&
+                        !isTranscribing[clip.id] &&
+                        !transcriptionInitiated.current.has(clip.id)
+                      ) {
+                        transcriptionInitiated.current.add(clip.id);
+                        setTimeout(() => transcribeAudio(clip), 500);
+                      }
+
                       return (
                         <Card
                           key={clip.id}
@@ -1192,6 +1250,39 @@ export default function MusicGenerator() {
                                   )}
                                 </Button>
                               </div>
+
+                              {/* Lyrics Transcription Section */}
+                              {clip.status === "complete" && (
+                                <div className="mt-6 pt-4 border-t border-gray-600/30">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <span className="text-lg">🎤</span>
+                                    <h4 className="text-lg font-semibold text-white">
+                                      Lyrics
+                                    </h4>
+                                  </div>
+
+                                  {isTranscribing[clip.id] ? (
+                                    <div className="glass p-4 rounded-xl bg-blue-400/5 border border-blue-400/20">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-5 h-5 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
+                                        <p className="text-blue-300">Transcribing lyrics...</p>
+                                      </div>
+                                    </div>
+                                  ) : transcriptions[clip.id] ? (
+                                    <div className="glass p-4 rounded-xl bg-gray-500/5 border border-gray-500/20">
+                                      <p className="text-gray-200 leading-relaxed whitespace-pre-line">
+                                        {transcriptions[clip.id]}
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div className="glass p-4 rounded-xl bg-gray-500/5 border border-gray-500/20">
+                                      <p className="text-gray-400 italic">
+                                        Lyrics will appear automatically once transcription completes
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </Card>
