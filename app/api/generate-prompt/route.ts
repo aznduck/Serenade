@@ -97,7 +97,7 @@ Your response should be in this exact format:
 
 The prompt should be creative, personal, and suitable for music generation. Suggest 2-3 relevant musical genres/moods for tags.
 
-CRITICAL: You MUST keep the prompt strictly under 150 characters. This is a hard limit - Suno will reject anything longer. Be extremely concise and focus only on the essential musical concept.`;
+CRITICAL: You MUST keep the prompt strictly under 500 characters. This is a hard limit - Suno will reject anything longer. Try to fill the topic with as much detail as possible within that limit.`;
 
     console.log(`[GeneratePrompt] Sending request to Claude API - Prompt length: ${promptForClaude.length} characters`);
 
