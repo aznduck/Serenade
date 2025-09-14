@@ -58,7 +58,7 @@ export function Waveform({
           // Create source from the proxy audio element
           sourceRef.current = audioContextRef.current.createMediaElementSource(proxyAudioElement);
           sourceRef.current.connect(analyserRef.current);
-          analyserRef.current.connect(audioContextRef.current.destination);
+          // DO NOT connect analyser to destination - we only want analysis, not playback
 
           // Sync proxy audio with the original audio element
           if (audioElement) {
