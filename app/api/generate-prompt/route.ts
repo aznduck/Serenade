@@ -4,7 +4,7 @@ import { getRecentMessages, prepareMessagesForPrompt } from '@/lib/imessage-extr
 
 export async function POST(request: NextRequest) {
   try {
-    const { spotifyData, gmailData, includeMessages = false } = await request.json();
+    const { spotifyData, gmailData, iMessageData, includeMessages = false } = await request.json();
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -30,16 +30,24 @@ export async function POST(request: NextRequest) {
     let messageContext = '';
     if (includeMessages) {
       console.log('[GeneratePrompt] Message analysis requested');
-      try {
-        console.log('[GeneratePrompt] Extracting recent messages (7 days)');
-        const messages = await getRecentMessages(7); // Last 7 days
-        console.log(`[GeneratePrompt] Retrieved ${messages.length} messages`);
 
-        messageContext = prepareMessagesForPrompt(messages);
-        console.log(`[GeneratePrompt] Message context prepared, length: ${messageContext.length} characters`);
-      } catch (error) {
-        console.error('[GeneratePrompt] Error extracting messages:', error);
-        messageContext = '';
+      // Use passed iMessage data if available, otherwise extract fresh
+      if (iMessageData && iMessageData.messages) {
+        console.log(`[GeneratePrompt] Using passed iMessage data: ${iMessageData.messages.length} messages`);
+        messageContext = prepareMessagesForPrompt(iMessageData.messages);
+        console.log(`[GeneratePrompt] Message context prepared from passed data, length: ${messageContext.length} characters`);
+      } else {
+        console.log('[GeneratePrompt] No passed iMessage data, extracting fresh messages');
+        try {
+          const messages = await getRecentMessages(7); // Last 7 days
+          console.log(`[GeneratePrompt] Retrieved ${messages.length} messages`);
+
+          messageContext = prepareMessagesForPrompt(messages);
+          console.log(`[GeneratePrompt] Message context prepared, length: ${messageContext.length} characters`);
+        } catch (error) {
+          console.error('[GeneratePrompt] Error extracting messages:', error);
+          messageContext = '';
+        }
       }
     } else {
       console.log('[GeneratePrompt] Message analysis not requested');
@@ -83,21 +91,28 @@ export async function POST(request: NextRequest) {
 Given this user's personal data:
 ${JSON.stringify(userDataSummary, null, 2)}
 
-Create a Suno AI song prompt that:
-1. Reflects their music taste from Spotify data (if provided)
-2. Incorporates themes from their recent email subjects (if provided)
-3. Captures their communication patterns and relationships from message activity (if provided)
-4. Creates a unique, personal song that tells their story
+Create a Suno AI song prompt with clear separation of concerns:
+
+TAGS (musical style): Use Spotify data to determine 2-3 relevant musical genres/moods
+PROMPT (lyrical content): Focus ONLY on themes from emails and messages - specific places, events, people, emotions, and life experiences. DO NOT mention musical genres or styles in the prompt.
 
 Your response should be in this exact format:
 {
-  "prompt": "A detailed song description that Suno AI can use...",
+  "prompt": "Lyrical themes and story content only...",
   "tags": "genre1, genre2, mood"
 }
 
-The prompt should be creative, personal, and suitable for music generation. Suggest 2-3 relevant musical genres/moods for tags.
+PROMPT RULES:
+- Focus on concrete details from emails/messages: locations, events, relationships, activities
+- Include specific themes like college life, travel, friendships, work, dreams
+- NO musical style descriptions (no "rage rap meets house beats", "tech house drops", etc.)
+- Paint a vivid picture of their life story and experiences
+- Keep strictly under 500 characters - this is a hard Suno limit.
 
-CRITICAL: You MUST keep the prompt strictly under 500 characters. This is a hard limit - Suno will reject anything longer. Try to fill the topic with as much detail as possible within that limit.`;
+TAGS RULES:
+- Use Spotify listening history to determine appropriate musical styles
+- 2-3 genres/moods only
+- These will control the musical production, not the prompt`;
 
     console.log(`[GeneratePrompt] Sending request to Claude API - Prompt length: ${promptForClaude.length} characters`);
 

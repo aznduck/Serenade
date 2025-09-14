@@ -43,8 +43,8 @@ export default function MusicGenerator() {
 
   // Processing Modal state
   const [processingState, setProcessingState] = useState<ProcessingState>({
-    currentStep: 'messages',
-    currentSubStep: '',
+    currentStep: "messages",
+    currentSubStep: "",
     progress: 0,
     isProcessing: false,
     data: {},
@@ -216,8 +216,8 @@ export default function MusicGenerator() {
     setError(null);
 
     updateProcessingState({
-      currentStep: 'messages',
-      currentSubStep: '',
+      currentStep: "messages",
+      currentSubStep: "",
       progress: 0,
       isProcessing: true,
       data: {},
@@ -226,26 +226,48 @@ export default function MusicGenerator() {
     try {
       // STEP 1: Message Data Collection
       updateProcessingState({
-        currentStep: 'messages',
-        currentSubStep: 'Analyzing conversation patterns...',
-        progress: 5
+        currentStep: "messages",
+        currentSubStep: "Analyzing conversation patterns...",
+        progress: 5,
       });
 
-      // For now, simulate message processing since it's disabled
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      updateProcessingState({
-        currentSubStep: 'Processing recent conversations...',
-        progress: 15,
-        data: { messagesPreview: ['Contact_1: 3 messages', 'Contact_2: 7 messages'] }
+      // Extract real iMessage data
+      const iMessageResponse = await fetch("/api/imessage/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
       });
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const iMessageData = iMessageResponse.ok
+        ? await iMessageResponse.json()
+        : null;
+
+      if (iMessageData?.data?.preview) {
+        updateProcessingState({
+          currentSubStep: "Processing recent conversations...",
+          progress: 15,
+          data: { messagesPreview: iMessageData.data.preview },
+        });
+      } else {
+        // Fallback if iMessage extraction fails
+        updateProcessingState({
+          currentSubStep: "Processing recent conversations...",
+          progress: 15,
+          data: {
+            messagesPreview: [
+              iMessageData?.data?.summary || "Message extraction unavailable",
+            ],
+          },
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // STEP 2: Gmail Data Collection
       updateProcessingState({
-        currentStep: 'gmail',
-        currentSubStep: 'Fetching recent messages...',
-        progress: 20
+        currentStep: "gmail",
+        currentSubStep: "Fetching recent messages...",
+        progress: 20,
       });
 
       const gmailResponse = await fetch("/api/gmail/data", {
@@ -263,7 +285,7 @@ export default function MusicGenerator() {
         updateProcessingState({
           currentSubStep: `Processing ${gmailData.data.count} messages...`,
           progress: 30,
-          data: { ...processingState.data, gmailPreview: subjects }
+          data: { ...processingState.data, gmailPreview: subjects },
         });
       }
 
@@ -271,33 +293,44 @@ export default function MusicGenerator() {
 
       // STEP 3: Spotify Data Collection
       updateProcessingState({
-        currentStep: 'spotify',
-        currentSubStep: 'Loading top artists...',
-        progress: 40
+        currentStep: "spotify",
+        currentSubStep: "Loading top artists...",
+        progress: 40,
       });
 
-      console.log('[Frontend] Fetching Spotify data with token:', spotifyToken?.substring(0, 20) + '...');
+      console.log(
+        "[Frontend] Fetching Spotify data with token:",
+        spotifyToken?.substring(0, 20) + "..."
+      );
       const spotifyResponse = await fetch("/api/spotify/data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accessToken: spotifyToken }),
       });
 
-      console.log(`[Frontend] Spotify API response: ${spotifyResponse.status} ${spotifyResponse.statusText}`);
+      console.log(
+        `[Frontend] Spotify API response: ${spotifyResponse.status} ${spotifyResponse.statusText}`
+      );
 
       let spotifyData = null;
       if (spotifyResponse.ok) {
         spotifyData = await spotifyResponse.json();
-        console.log('[Frontend] Spotify data fetched successfully');
+        console.log("[Frontend] Spotify data fetched successfully");
       } else {
         const errorText = await spotifyResponse.text();
-        console.error(`[Frontend] Spotify API failed: ${spotifyResponse.status} - ${errorText}`);
+        console.error(
+          `[Frontend] Spotify API failed: ${spotifyResponse.status} - ${errorText}`
+        );
         if (spotifyResponse.status === 403) {
-          console.error('[Frontend] 403 Forbidden - likely token expired or insufficient scopes');
+          console.error(
+            "[Frontend] 403 Forbidden - likely token expired or insufficient scopes"
+          );
         } else if (spotifyResponse.status === 401) {
-          console.error('[Frontend] 401 Unauthorized - token invalid or malformed');
+          console.error(
+            "[Frontend] 401 Unauthorized - token invalid or malformed"
+          );
         } else if (spotifyResponse.status === 429) {
-          console.error('[Frontend] 429 Rate Limited - too many requests');
+          console.error("[Frontend] 429 Rate Limited - too many requests");
         }
         spotifyData = null;
       }
@@ -307,9 +340,9 @@ export default function MusicGenerator() {
           (artist: any) => artist.name
         );
         updateProcessingState({
-          currentSubStep: 'Loading top tracks...',
+          currentSubStep: "Loading top tracks...",
           progress: 55,
-          data: { ...processingState.data, spotifyPreview: artists }
+          data: { ...processingState.data, spotifyPreview: artists },
         });
       }
 
@@ -317,9 +350,9 @@ export default function MusicGenerator() {
 
       // STEP 4: Claude Prompt Generation
       updateProcessingState({
-        currentStep: 'claude',
-        currentSubStep: 'Analyzing your data...',
-        progress: 70
+        currentStep: "claude",
+        currentSubStep: "Analyzing your data...",
+        progress: 70,
       });
 
       const promptResponse = await fetch("/api/generate-prompt", {
@@ -328,8 +361,9 @@ export default function MusicGenerator() {
         body: JSON.stringify({
           spotifyData: spotifyData?.data,
           gmailData: gmailData?.data,
-          includeMessages: true
-        })
+          iMessageData: iMessageData?.data,
+          includeMessages: true,
+        }),
       });
 
       if (!promptResponse.ok) {
@@ -339,9 +373,9 @@ export default function MusicGenerator() {
       const promptData = await promptResponse.json();
 
       updateProcessingState({
-        currentSubStep: 'Generating personalized prompt...',
+        currentSubStep: "Generating personalized prompt...",
         progress: 85,
-        data: { ...processingState.data, generatedPrompt: promptData.prompt }
+        data: { ...processingState.data, generatedPrompt: promptData.prompt },
       });
 
       // Store the generated prompt for display
@@ -628,10 +662,22 @@ export default function MusicGenerator() {
         <div className="absolute bottom-1/4 left-1/8 w-24 h-14 bg-gradient-to-r from-blue-400/10 to-teal-400/14 rounded-full blur-lg pulse-slow delay-2500" />
 
         {/* Floating accent points */}
-        <div className="absolute top-1/4 left-1/3 w-3 h-3 bg-teal-400/40 rounded-full float" style={{animationDelay: '0s'}} />
-        <div className="absolute top-3/4 right-1/4 w-2 h-2 bg-blue-400/40 rounded-full float" style={{animationDelay: '1s'}} />
-        <div className="absolute top-1/2 left-1/6 w-4 h-4 bg-teal-400/30 rounded-full float" style={{animationDelay: '2s'}} />
-        <div className="absolute bottom-1/3 right-1/3 w-2.5 h-2.5 bg-cyan-400/35 rounded-full float" style={{animationDelay: '3s'}} />
+        <div
+          className="absolute top-1/4 left-1/3 w-3 h-3 bg-teal-400/40 rounded-full float"
+          style={{ animationDelay: "0s" }}
+        />
+        <div
+          className="absolute top-3/4 right-1/4 w-2 h-2 bg-blue-400/40 rounded-full float"
+          style={{ animationDelay: "1s" }}
+        />
+        <div
+          className="absolute top-1/2 left-1/6 w-4 h-4 bg-teal-400/30 rounded-full float"
+          style={{ animationDelay: "2s" }}
+        />
+        <div
+          className="absolute bottom-1/3 right-1/3 w-2.5 h-2.5 bg-cyan-400/35 rounded-full float"
+          style={{ animationDelay: "3s" }}
+        />
       </div>
 
       {/* Teal-tinted grid pattern */}
@@ -654,7 +700,8 @@ export default function MusicGenerator() {
                 Serenade
               </h1>
               <p className="text-2xl text-gray-300 max-w-4xl mx-auto font-light leading-relaxed">
-                Transform your digital footprint into a personalized musical masterpiece
+                Transform your digital footprint into a personalized musical
+                masterpiece
               </p>
             </div>
           </div>
@@ -666,8 +713,12 @@ export default function MusicGenerator() {
                 {/* OAuth Connections */}
                 <div className="space-y-8">
                   <div className="text-center">
-                    <h2 className="text-3xl font-semibold text-white mb-3">Connect Your Digital Life</h2>
-                    <p className="text-lg text-gray-300">Link your accounts to create a truly personalized song</p>
+                    <h2 className="text-3xl font-semibold text-white mb-3">
+                      Connect Your Digital Life
+                    </h2>
+                    <p className="text-lg text-gray-300">
+                      Link your accounts to create a truly personalized song
+                    </p>
                   </div>
 
                   {/* Connection Grid */}
@@ -676,7 +727,9 @@ export default function MusicGenerator() {
                     <div className="space-y-4">
                       <div className="flex items-center gap-3 mb-2">
                         <Music className="w-6 h-6 text-green-400" />
-                        <h3 className="text-xl font-semibold text-white">Spotify</h3>
+                        <h3 className="text-xl font-semibold text-white">
+                          Spotify
+                        </h3>
                       </div>
                       <div className="flex gap-3">
                         <Button
@@ -724,7 +777,9 @@ export default function MusicGenerator() {
                     <div className="space-y-4">
                       <div className="flex items-center gap-3 mb-2">
                         <span className="text-2xl">📧</span>
-                        <h3 className="text-xl font-semibold text-white">Gmail</h3>
+                        <h3 className="text-xl font-semibold text-white">
+                          Gmail
+                        </h3>
                       </div>
                       <div className="flex gap-3">
                         <Button
@@ -824,8 +879,10 @@ export default function MusicGenerator() {
                         </p>
                         {generatedTags && (
                           <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-600/30">
-                            <span className="text-sm text-teal-400 font-semibold">Style:</span>
-                            {generatedTags.split(',').map((tag, index) => (
+                            <span className="text-sm text-teal-400 font-semibold">
+                              Style:
+                            </span>
+                            {generatedTags.split(",").map((tag, index) => (
                               <span
                                 key={index}
                                 className="px-3 py-2 surface-1 border border-teal-500/40 text-teal-300 rounded-full text-sm font-medium"
@@ -934,15 +991,19 @@ export default function MusicGenerator() {
 
                             {clip.metadata.tags && (
                               <div className="flex flex-wrap gap-2">
-                                <span className="text-sm text-teal-400 font-medium">Style:</span>
-                                {clip.metadata.tags.split(',').map((tag, index) => (
-                                  <span
-                                    key={index}
-                                    className="px-2 py-1 bg-teal-400/10 text-teal-300 rounded-full text-xs font-medium"
-                                  >
-                                    {tag.trim()}
-                                  </span>
-                                ))}
+                                <span className="text-sm text-teal-400 font-medium">
+                                  Style:
+                                </span>
+                                {clip.metadata.tags
+                                  .split(",")
+                                  .map((tag, index) => (
+                                    <span
+                                      key={index}
+                                      className="px-2 py-1 bg-teal-400/10 text-teal-300 rounded-full text-xs font-medium"
+                                    >
+                                      {tag.trim()}
+                                    </span>
+                                  ))}
                               </div>
                             )}
 
@@ -950,7 +1011,9 @@ export default function MusicGenerator() {
                               <div className="glass p-3 rounded-xl bg-yellow-400/5 border border-yellow-400/20">
                                 <p className="text-sm text-yellow-300 flex items-center gap-2">
                                   <span className="text-lg">🎵</span>
-                                  Your song is still being composed! You can start listening, but full playback controls will be available once complete.
+                                  Your song is still being composed! You can
+                                  start listening, but full playback controls
+                                  will be available once complete.
                                 </p>
                               </div>
                             )}
@@ -1128,7 +1191,9 @@ export default function MusicGenerator() {
                               {clip.status === "complete" && clip.audio_url && (
                                 <div className="mt-4">
                                   <Waveform
-                                    audioElement={audioElements[clip.id] || null}
+                                    audioElement={
+                                      audioElements[clip.id] || null
+                                    }
                                     audioUrl={clip.audio_url}
                                     isPlaying={!!isPlaying[clip.id]}
                                     className="rounded-lg shadow-sm"
@@ -1161,7 +1226,8 @@ export default function MusicGenerator() {
                                   onClick={() => handleDownload(clip)}
                                   size="lg"
                                   className={`flex-1 h-12 font-semibold rounded-2xl transition-all duration-300 ${
-                                    clip.status === "streaming" || isDownloading[clip.id]
+                                    clip.status === "streaming" ||
+                                    isDownloading[clip.id]
                                       ? "glass border-2 border-gray-400/30 text-gray-400"
                                       : "glass border-2 border-teal-400/30 hover:border-teal-400/60 text-teal-400 hover:bg-teal-400/10 hover-lift shadow-lg hover:shadow-teal-400/25"
                                   }`}
