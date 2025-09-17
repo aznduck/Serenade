@@ -171,3 +171,5 @@ Serenade showcases the power of combining multiple AI services to create persona
 ---
 
 🎵 **Create your perfect soundtrack** • Powered by [Suno AI](https://suno.com) • Built with ❤️ for HackMIT 2025
+
+📖 [HackMIT Presentation](https://www.figma.com/design/2cx9mem7ZHF3d8Pa0coO3J/HACKMIT-Presentation?node-id=0-1&t=epubLOfBNkR9x1Qc-1)
