@@ -1,9 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Download, Music, Sparkles, Play, Pause, Heart } from "lucide-react";
+import { SpotifyLogo } from "@/components/ui/SpotifyLogo";
+import { GmailLogo } from "@/components/ui/GmailLogo";
+import { IMessageToggle } from "@/components/ui/iMessageToggle";
 import { SunoService, SunoClip } from "@/lib/suno-service";
 import InlineProcessing, {
   ProcessingState,
@@ -29,6 +32,15 @@ export default function MusicGenerator() {
   const [isDownloading, setIsDownloading] = useState<{
     [key: string]: boolean;
   }>({});
+  const [transcriptions, setTranscriptions] = useState<{
+    [key: string]: string;
+  }>({});
+  const [isTranscribing, setIsTranscribing] = useState<{
+    [key: string]: boolean;
+  }>({});
+
+  // Track which clips have had transcription initiated to prevent duplicates
+  const transcriptionInitiated = useRef<Set<string>>(new Set());
 
   // OAuth state
   const [spotifyToken, setSpotifyToken] = useState<string | null>(null);
@@ -38,13 +50,16 @@ export default function MusicGenerator() {
   const [isSpotifyConnecting, setIsSpotifyConnecting] = useState(false);
   const [isGmailConnecting, setIsGmailConnecting] = useState(false);
 
+  // iMessage state
+  const [isMessagesEnabled, setIsMessagesEnabled] = useState(true);
+
   // Generate from My Life state
   const [isGeneratingFromLife, setIsGeneratingFromLife] = useState(false);
 
   // Processing Modal state
   const [processingState, setProcessingState] = useState<ProcessingState>({
-    currentStep: 'messages',
-    currentSubStep: '',
+    currentStep: "messages",
+    currentSubStep: "",
     progress: 0,
     isProcessing: false,
     data: {},
@@ -202,6 +217,48 @@ export default function MusicGenerator() {
     setProcessingState((prev) => ({ ...prev, ...updates }));
   };
 
+  const transcribeAudio = async (clip: SunoClip) => {
+    if (!clip.audio_url || isTranscribing[clip.id] || transcriptions[clip.id]) {
+      return;
+    }
+
+    setIsTranscribing((prev) => ({ ...prev, [clip.id]: true }));
+
+    try {
+      console.log(`[Frontend] Starting transcription for clip: ${clip.id}`);
+      const response = await fetch("/api/transcribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audioUrl: clip.audio_url }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setTranscriptions((prev) => ({
+          ...prev,
+          [clip.id]: data.transcription,
+        }));
+        console.log(`[Frontend] Transcription completed for clip: ${clip.id}`);
+      } else {
+        console.error(
+          `[Frontend] Transcription failed: ${response.statusText}`
+        );
+        setTranscriptions((prev) => ({
+          ...prev,
+          [clip.id]: "Transcription failed - please try again later",
+        }));
+      }
+    } catch (error) {
+      console.error(`[Frontend] Transcription error:`, error);
+      setTranscriptions((prev) => ({
+        ...prev,
+        [clip.id]: "Transcription failed - please try again later",
+      }));
+    } finally {
+      setIsTranscribing((prev) => ({ ...prev, [clip.id]: false }));
+    }
+  };
+
   const handleGenerateFromLife = async () => {
     if (!isSpotifyConnected || !isGmailConnected) {
       setError("Please connect both Spotify and Gmail first");
@@ -216,8 +273,8 @@ export default function MusicGenerator() {
     setError(null);
 
     updateProcessingState({
-      currentStep: 'messages',
-      currentSubStep: '',
+      currentStep: "messages",
+      currentSubStep: "",
       progress: 0,
       isProcessing: true,
       data: {},
@@ -226,26 +283,48 @@ export default function MusicGenerator() {
     try {
       // STEP 1: Message Data Collection
       updateProcessingState({
-        currentStep: 'messages',
-        currentSubStep: 'Analyzing conversation patterns...',
-        progress: 5
+        currentStep: "messages",
+        currentSubStep: "Analyzing conversation patterns...",
+        progress: 5,
       });
 
-      // For now, simulate message processing since it's disabled
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      updateProcessingState({
-        currentSubStep: 'Processing recent conversations...',
-        progress: 15,
-        data: { messagesPreview: ['Contact_1: 3 messages', 'Contact_2: 7 messages'] }
+      // Extract real iMessage data
+      const iMessageResponse = await fetch("/api/imessage/data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
       });
 
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const iMessageData = iMessageResponse.ok
+        ? await iMessageResponse.json()
+        : null;
+
+      if (iMessageData?.data?.preview) {
+        updateProcessingState({
+          currentSubStep: "Processing recent conversations...",
+          progress: 15,
+          data: { messagesPreview: iMessageData.data.preview },
+        });
+      } else {
+        // Fallback if iMessage extraction fails
+        updateProcessingState({
+          currentSubStep: "Processing recent conversations...",
+          progress: 15,
+          data: {
+            messagesPreview: [
+              iMessageData?.data?.summary || "Message extraction unavailable",
+            ],
+          },
+        });
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
       // STEP 2: Gmail Data Collection
       updateProcessingState({
-        currentStep: 'gmail',
-        currentSubStep: 'Fetching recent messages...',
-        progress: 20
+        currentStep: "gmail",
+        currentSubStep: "Fetching recent messages...",
+        progress: 20,
       });
 
       const gmailResponse = await fetch("/api/gmail/data", {
@@ -263,7 +342,7 @@ export default function MusicGenerator() {
         updateProcessingState({
           currentSubStep: `Processing ${gmailData.data.count} messages...`,
           progress: 30,
-          data: { ...processingState.data, gmailPreview: subjects }
+          data: { ...processingState.data, gmailPreview: subjects },
         });
       }
 
@@ -271,33 +350,44 @@ export default function MusicGenerator() {
 
       // STEP 3: Spotify Data Collection
       updateProcessingState({
-        currentStep: 'spotify',
-        currentSubStep: 'Loading top artists...',
-        progress: 40
+        currentStep: "spotify",
+        currentSubStep: "Loading top artists...",
+        progress: 40,
       });
 
-      console.log('[Frontend] Fetching Spotify data with token:', spotifyToken?.substring(0, 20) + '...');
+      console.log(
+        "[Frontend] Fetching Spotify data with token:",
+        spotifyToken?.substring(0, 20) + "..."
+      );
       const spotifyResponse = await fetch("/api/spotify/data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ accessToken: spotifyToken }),
       });
 
-      console.log(`[Frontend] Spotify API response: ${spotifyResponse.status} ${spotifyResponse.statusText}`);
+      console.log(
+        `[Frontend] Spotify API response: ${spotifyResponse.status} ${spotifyResponse.statusText}`
+      );
 
       let spotifyData = null;
       if (spotifyResponse.ok) {
         spotifyData = await spotifyResponse.json();
-        console.log('[Frontend] Spotify data fetched successfully');
+        console.log("[Frontend] Spotify data fetched successfully");
       } else {
         const errorText = await spotifyResponse.text();
-        console.error(`[Frontend] Spotify API failed: ${spotifyResponse.status} - ${errorText}`);
+        console.error(
+          `[Frontend] Spotify API failed: ${spotifyResponse.status} - ${errorText}`
+        );
         if (spotifyResponse.status === 403) {
-          console.error('[Frontend] 403 Forbidden - likely token expired or insufficient scopes');
+          console.error(
+            "[Frontend] 403 Forbidden - likely token expired or insufficient scopes"
+          );
         } else if (spotifyResponse.status === 401) {
-          console.error('[Frontend] 401 Unauthorized - token invalid or malformed');
+          console.error(
+            "[Frontend] 401 Unauthorized - token invalid or malformed"
+          );
         } else if (spotifyResponse.status === 429) {
-          console.error('[Frontend] 429 Rate Limited - too many requests');
+          console.error("[Frontend] 429 Rate Limited - too many requests");
         }
         spotifyData = null;
       }
@@ -307,9 +397,9 @@ export default function MusicGenerator() {
           (artist: any) => artist.name
         );
         updateProcessingState({
-          currentSubStep: 'Loading top tracks...',
+          currentSubStep: "Loading top tracks...",
           progress: 55,
-          data: { ...processingState.data, spotifyPreview: artists }
+          data: { ...processingState.data, spotifyPreview: artists },
         });
       }
 
@@ -317,9 +407,9 @@ export default function MusicGenerator() {
 
       // STEP 4: Claude Prompt Generation
       updateProcessingState({
-        currentStep: 'claude',
-        currentSubStep: 'Analyzing your data...',
-        progress: 70
+        currentStep: "claude",
+        currentSubStep: "Analyzing your data...",
+        progress: 70,
       });
 
       const promptResponse = await fetch("/api/generate-prompt", {
@@ -328,8 +418,8 @@ export default function MusicGenerator() {
         body: JSON.stringify({
           spotifyData: spotifyData?.data,
           gmailData: gmailData?.data,
-          includeMessages: true
-        })
+          includeMessages: isMessagesEnabled,
+        }),
       });
 
       if (!promptResponse.ok) {
@@ -339,9 +429,9 @@ export default function MusicGenerator() {
       const promptData = await promptResponse.json();
 
       updateProcessingState({
-        currentSubStep: 'Generating personalized prompt...',
+        currentSubStep: "Generating personalized prompt...",
         progress: 85,
-        data: { ...processingState.data, generatedPrompt: promptData.prompt }
+        data: { ...processingState.data, generatedPrompt: promptData.prompt },
       });
 
       // Store the generated prompt for display
@@ -373,6 +463,9 @@ export default function MusicGenerator() {
             );
             if (hasStreamingClips) {
               setIsComplete(true);
+              // Auto-close processing modal when first song is ready
+              setIsProcessingVisible(false);
+              setIsGeneratingFromLife(false);
             }
           }
         }
@@ -380,6 +473,9 @@ export default function MusicGenerator() {
         .then((finalClips) => {
           setGeneratedClips(finalClips);
           setIsComplete(true);
+          // Ensure processing modal is closed when generation fully completes
+          setIsProcessingVisible(false);
+          setIsGeneratingFromLife(false);
         })
         .catch((error) => {
           console.error("Suno generation error:", error);
@@ -613,188 +709,227 @@ export default function MusicGenerator() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-red-50 to-yellow-50 relative overflow-hidden">
-      {/* Floating cloud decorations */}
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-900 to-black relative overflow-hidden">
+      {/* Animated background elements with teal presence */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-20 left-10 w-32 h-20 bg-gradient-to-r from-orange-200/40 to-red-200/40 rounded-full blur-xl animate-pulse" />
-        <div className="absolute top-40 right-20 w-40 h-24 bg-gradient-to-r from-red-200/40 to-yellow-200/40 rounded-full blur-xl animate-pulse delay-1000" />
-        <div className="absolute bottom-32 left-1/4 w-36 h-22 bg-gradient-to-r from-yellow-200/40 to-orange-200/40 rounded-full blur-xl animate-pulse delay-2000" />
-        <div className="absolute bottom-20 right-1/3 w-28 h-18 bg-gradient-to-r from-orange-300/30 to-red-300/30 rounded-full blur-xl animate-pulse delay-500" />
-        <div className="absolute top-60 left-1/2 w-24 h-16 bg-gradient-to-r from-red-300/25 to-orange-300/25 rounded-full blur-2xl animate-pulse delay-3000" />
-        <div className="absolute bottom-60 right-10 w-30 h-20 bg-gradient-to-r from-yellow-300/35 to-red-300/35 rounded-full blur-xl animate-pulse delay-1500" />
+        {/* Teal accent shapes */}
+        <div className="absolute top-20 left-10 w-40 h-24 bg-gradient-to-r from-teal-500/15 to-blue-500/12 rounded-full blur-xl pulse-slow" />
+        <div className="absolute top-40 right-20 w-48 h-28 bg-gradient-to-r from-blue-500/12 to-teal-500/18 rounded-full blur-xl pulse-slow delay-1000" />
+        <div className="absolute bottom-32 left-1/4 w-44 h-26 bg-gradient-to-r from-teal-500/20 to-cyan-500/15 rounded-full blur-xl pulse-slow delay-2000" />
+        <div className="absolute bottom-20 right-1/3 w-36 h-22 bg-gradient-to-r from-cyan-500/12 to-teal-500/16 rounded-full blur-xl pulse-slow delay-500" />
+        <div className="absolute top-60 left-1/2 w-32 h-20 bg-gradient-to-r from-teal-500/14 to-blue-500/10 rounded-full blur-2xl pulse-slow delay-3000" />
+
+        {/* Additional teal background elements */}
+        <div className="absolute top-1/3 right-1/6 w-28 h-16 bg-gradient-to-r from-teal-400/8 to-cyan-400/12 rounded-full blur-lg pulse-slow delay-4000" />
+        <div className="absolute bottom-1/4 left-1/8 w-24 h-14 bg-gradient-to-r from-blue-400/10 to-teal-400/14 rounded-full blur-lg pulse-slow delay-2500" />
+
+        {/* Floating accent points */}
+        <div
+          className="absolute top-1/4 left-1/3 w-3 h-3 bg-teal-400/40 rounded-full float"
+          style={{ animationDelay: "0s" }}
+        />
+        <div
+          className="absolute top-3/4 right-1/4 w-2 h-2 bg-blue-400/40 rounded-full float"
+          style={{ animationDelay: "1s" }}
+        />
+        <div
+          className="absolute top-1/2 left-1/6 w-4 h-4 bg-teal-400/30 rounded-full float"
+          style={{ animationDelay: "2s" }}
+        />
+        <div
+          className="absolute bottom-1/3 right-1/3 w-2.5 h-2.5 bg-cyan-400/35 rounded-full float"
+          style={{ animationDelay: "3s" }}
+        />
       </div>
 
-      <div className="relative z-10 container mx-auto px-4 py-16">
-        <div className="max-w-2xl mx-auto text-center space-y-8">
+      {/* Teal-tinted grid pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(36,183,208,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(36,183,208,0.03)_1px,transparent_1px)] bg-[size:50px_50px] pointer-events-none" />
+
+      <div className="relative z-10 w-full px-6 py-16">
+        <div className="w-full max-w-7xl mx-auto space-y-16">
           {/* Header */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-center gap-2 text-primary">
-              <Music className="w-8 h-8" />
-              <Sparkles className="w-6 h-6" />
+          <div className="text-center space-y-8 fade-in">
+            <div className="flex items-center justify-center gap-4 mb-8">
+              <div className="p-4 surface-2 rounded-2xl border border-blue-500/30 hover:border-blue-400/50 transition-colors hover-glow">
+                <Music className="w-12 h-12 text-blue-400" />
+              </div>
+              <div className="p-3 surface-2 rounded-xl border border-teal-500/30 hover:border-teal-400/50 transition-colors hover-glow">
+                <Sparkles className="w-10 h-10 text-teal-400" />
+              </div>
             </div>
-            <h1 className="text-4xl font-bold text-balance bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-              Serenade
-            </h1>
+            <div className="space-y-6">
+              <h1 className="text-7xl font-bold text-balance bg-gradient-to-r from-white via-blue-200 to-teal-300 bg-clip-text text-transparent hover:scale-105 transition-transform duration-500">
+                Serenade
+              </h1>
+              <p className="text-2xl text-gray-300 max-w-4xl mx-auto font-light leading-relaxed">
+                Transform your digital footprint into a personalized musical
+                masterpiece
+              </p>
+            </div>
           </div>
 
-          {/* Main Interface */}
-          <Card className="p-8 backdrop-blur-sm bg-card/80 border-border/50 shadow-xl">
-            <div className="space-y-6">
-              {/* OAuth Connections */}
-              <div className="space-y-4">
-                {/* Spotify Login */}
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleSpotifyLogin}
-                    disabled={isSpotifyConnected || isSpotifyConnecting}
-                    size="lg"
-                    variant={isSpotifyConnected ? "default" : "outline"}
-                    className={`flex-1 h-12 text-base font-semibold ${
-                      isSpotifyConnected
-                        ? "bg-green-600 hover:bg-green-700 text-white"
-                        : "border-2 border-green-500/20 hover:border-green-500/40 hover:bg-green-500/5"
-                    }`}
-                  >
-                    {isSpotifyConnecting ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin mr-2" />
-                        Connecting to Spotify...
-                      </>
-                    ) : isSpotifyConnected ? (
-                      <>✅ Spotify Connected</>
-                    ) : (
-                      <>🎵 Connect Spotify</>
-                    )}
-                  </Button>
-                  {isSpotifyConnected && (
-                    <Button
-                      onClick={handleSpotifyDisconnect}
-                      size="lg"
-                      variant="outline"
-                      className="h-12 px-4 border-2 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/5 text-red-600"
-                    >
-                      ❌
-                    </Button>
-                  )}
-                </div>
-
-                {/* Gmail Login */}
-                <div className="flex gap-2">
-                  <Button
-                    onClick={handleGmailLogin}
-                    disabled={isGmailConnected || isGmailConnecting}
-                    size="lg"
-                    variant={isGmailConnected ? "default" : "outline"}
-                    className={`flex-1 h-12 text-base font-semibold ${
-                      isGmailConnected
-                        ? "bg-blue-600 hover:bg-blue-700 text-white"
-                        : "border-2 border-blue-500/20 hover:border-blue-500/40 hover:bg-blue-500/5"
-                    }`}
-                  >
-                    {isGmailConnecting ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin mr-2" />
-                        Connecting to Gmail...
-                      </>
-                    ) : isGmailConnected ? (
-                      <>✅ Gmail Connected</>
-                    ) : (
-                      <>📧 Connect Gmail</>
-                    )}
-                  </Button>
-                  {isGmailConnected && (
-                    <Button
-                      onClick={handleGmailDisconnect}
-                      size="lg"
-                      variant="outline"
-                      className="h-12 px-4 border-2 border-red-500/20 hover:border-red-500/40 hover:bg-red-500/5 text-red-600"
-                    >
-                      ❌
-                    </Button>
-                  )}
-                </div>
-
-                {/* Generate from Life Button */}
-                {isSpotifyConnected && isGmailConnected && (
-                  <Button
-                    onClick={handleGenerateFromLife}
-                    disabled={isGeneratingFromLife}
-                    size="lg"
-                    className="w-full h-12 text-base font-semibold bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white"
-                  >
-                    {isGeneratingFromLife ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <Heart className="w-5 h-5 mr-2" />
-                        Serenade
-                      </>
-                    )}
-                  </Button>
-                )}
-
-                <p className="text-xs text-muted-foreground text-center">
-                  {!isSpotifyConnected && !isGmailConnected
-                    ? "Connect both services to create a song inspired by your music taste and recent life events"
-                    : !isSpotifyConnected
-                    ? "Connect Spotify to complete the setup"
-                    : !isGmailConnected
-                    ? "Connect Gmail to complete the setup"
-                    : "Ready to generate your personalized song!"}
-                </p>
-
-                {/* Display Generated Prompt */}
-                {generatedPrompt && (
-                  <div className="mt-6 p-4 bg-slate-50 rounded-lg border">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-2">
-                      Generated Prompt for Suno AI:
-                    </h3>
-                    <p className="text-sm text-slate-600 mb-2">
-                      "<em>{generatedPrompt}</em>"
-                    </p>
-                    {generatedTags && (
-                      <p className="text-xs text-slate-500">
-                        Tags: {generatedTags}
-                      </p>
-                    )}
+          {/* Main Interface - Full Width */}
+          <div className="w-full space-y-12">
+            <Card className="surface-2 hover-lift p-12 rounded-3xl border border-gray-600/50 slide-up shadow-2xl w-full">
+              <div className="space-y-10">
+                {/* OAuth Connections */}
+                <div className="space-y-8">
+                  <div className="text-center">
+                    <h2 className="text-3xl font-semibold text-white mb-3">
+                      Connect Your Digital Life
+                    </h2>
                   </div>
-                )}
-              </div>
 
-              {/* Inline Processing View */}
-              {isProcessingVisible && (
-                <InlineProcessing
-                  isVisible={isProcessingVisible}
-                  processingState={processingState}
-                  onCancel={handleCancelProcessing}
-                  onComplete={handleCompleteProcessing}
-                />
-              )}
+                  {/* Connection Grid */}
+                  <div className="grid md:grid-cols-3 gap-8">
+                    {/* Spotify Login */}
+                    <div className="space-y-4">
+                      <SpotifyLogo
+                        isConnected={isSpotifyConnected}
+                        isConnecting={isSpotifyConnecting}
+                        onConnect={handleSpotifyLogin}
+                        onDisconnect={handleSpotifyDisconnect}
+                        size={32}
+                      />
+                    </div>
 
-              {/* Error Display */}
-              {error && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-sm text-red-600">
-                    <strong>Error:</strong> {error}...
-                  </p>
-                </div>
-              )}
+                    {/* Gmail Login */}
+                    <div className="space-y-4">
+                      <GmailLogo
+                        isConnected={isGmailConnected}
+                        isConnecting={isGmailConnecting}
+                        onConnect={handleGmailLogin}
+                        onDisconnect={handleGmailDisconnect}
+                        size={32}
+                      />
+                    </div>
 
-              {/* Generated Songs */}
-              {generatedClips.length > 0 && (
-                <div className="space-y-4 pt-4 border-t border-border">
-                  {isComplete && (
-                    <div className="text-center">
-                      <p className="text-sm text-muted-foreground mb-4">
-                        🎉 Your song
-                        {generatedClips.length > 1 ? "s are" : " is"} ready!
-                      </p>
+                    {/* iMessage Toggle */}
+                    <div className="space-y-4">
+                      <IMessageToggle
+                        isEnabled={isMessagesEnabled}
+                        onToggle={() =>
+                          setIsMessagesEnabled(!isMessagesEnabled)
+                        }
+                        size={32}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Generate from Life Button */}
+                  {isSpotifyConnected && isGmailConnected && (
+                    <div className="pt-8 border-t border-gray-600/30">
+                      <Button
+                        onClick={handleGenerateFromLife}
+                        disabled={isGeneratingFromLife}
+                        size="lg"
+                        className="w-full h-20 text-2xl font-bold rounded-3xl surface-1 border-2 border-teal-500/40 hover:border-teal-400/60 hover:bg-teal-500/10 text-white shadow-2xl hover:shadow-teal-500/20 transition-all duration-500 hover:scale-105"
+                      >
+                        {isGeneratingFromLife ? (
+                          <>
+                            <div className="w-6 h-6 border-2 border-current/30 border-t-current rounded-full animate-spin mr-3" />
+                            <span className="text-white">
+                              Creating Your Serenade...
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Heart className="w-8 h-8 mr-4 text-teal-400" />
+                            <span className="text-white">
+                              Create My Serenade
+                            </span>
+                          </>
+                        )}
+                      </Button>
                     </div>
                   )}
 
+                  <div className="text-center">
+                    <p className="text-lg text-gray-300 font-medium">
+                      {!isSpotifyConnected && !isGmailConnected
+                        ? "Connect both services to create a song inspired by your music taste and recent life events"
+                        : !isSpotifyConnected
+                        ? "Connect Spotify to complete the setup"
+                        : !isGmailConnected
+                        ? "Connect Gmail to complete the setup"
+                        : "Ready to generate your personalized song! ✨"}
+                    </p>
+                  </div>
+
+                  {/* Display Generated Prompt */}
+                  {generatedPrompt && (
+                    <div className="surface-3 p-8 rounded-3xl border border-teal-500/30 shadow-lg">
+                      <div className="flex items-center gap-3 mb-6">
+                        <Sparkles className="w-6 h-6 text-teal-400" />
+                        <h3 className="text-2xl font-semibold text-white">
+                          Your Personal Song Prompt
+                        </h3>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="max-h-none overflow-visible">
+                          <p className="text-gray-200 italic text-lg leading-relaxed whitespace-pre-wrap break-words">
+                            "{generatedPrompt}"
+                          </p>
+                        </div>
+                        {generatedTags && (
+                          <div className="flex flex-wrap gap-3 pt-4 border-t border-gray-600/30">
+                            <span className="text-sm text-teal-400 font-semibold">
+                              Style:
+                            </span>
+                            {generatedTags.split(",").map((tag, index) => (
+                              <span
+                                key={index}
+                                className="px-3 py-2 surface-1 border border-teal-500/40 text-teal-300 rounded-full text-sm font-medium"
+                              >
+                                {tag.trim()}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Inline Processing View */}
+                {isProcessingVisible && (
+                  <InlineProcessing
+                    isVisible={isProcessingVisible}
+                    processingState={processingState}
+                    onCancel={handleCancelProcessing}
+                    onComplete={handleCompleteProcessing}
+                  />
+                )}
+
+                {/* Error Display */}
+                {error && (
+                  <div className="surface-1 p-6 rounded-3xl border border-red-500/30">
+                    <p className="text-lg text-red-400">
+                      <strong>Error:</strong> {error}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            {/* Generated Songs - Full Width */}
+            {generatedClips.length > 0 && (
+              <div className="w-full space-y-8">
+                {isComplete && (
+                  <div className="text-center fade-in">
+                    <div className="flex items-center justify-center gap-3 mb-4">
+                      <Sparkles className="w-8 h-8 text-teal-400 animate-pulse" />
+                      <span className="text-3xl">🎉</span>
+                      <Sparkles className="w-8 h-8 text-blue-400 animate-pulse" />
+                    </div>
+                    <h3 className="text-3xl font-semibold text-white mb-3">
+                      Your Serenade
+                      {generatedClips.length > 1 ? "s are" : " is"} Ready!
+                    </h3>
+                  </div>
+                )}
+
+                <div className="grid gap-6">
                   {generatedClips
                     .filter(
                       (clip) =>
@@ -811,28 +946,46 @@ export default function MusicGenerator() {
                         setTimeout(() => refreshAudioMetadata(clip), 100);
                       }
 
+                      // Auto-transcribe when song is complete and audio_url is available (once per song)
+                      if (
+                        clip.status === "complete" &&
+                        clip.audio_url &&
+                        !transcriptions[clip.id] &&
+                        !isTranscribing[clip.id] &&
+                        !transcriptionInitiated.current.has(clip.id)
+                      ) {
+                        transcriptionInitiated.current.add(clip.id);
+                        setTimeout(() => transcribeAudio(clip), 500);
+                      }
+
                       return (
                         <Card
                           key={clip.id}
-                          className={`p-4 ${
+                          className={`surface-2 hover-lift p-8 rounded-3xl ${
                             clip.status === "complete"
-                              ? "bg-gradient-to-r from-green-50 to-blue-50"
-                              : "bg-gradient-to-r from-yellow-50 to-orange-50"
-                          }`}
+                              ? "border border-green-500/30 shadow-lg shadow-green-500/10"
+                              : "border border-yellow-500/30 shadow-lg shadow-yellow-500/10"
+                          } transition-all duration-500`}
                         >
-                          <div className="space-y-3">
+                          <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <h3 className="font-semibold text-lg">
-                                  {clip.title || "Untitled Song"}
-                                </h3>
-                                {clip.status === "streaming" && (
-                                  <span className="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded-full">
-                                    Streaming
-                                  </span>
-                                )}
+                              <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 bg-gradient-to-br from-blue-400/20 to-teal-400/20 rounded-2xl flex items-center justify-center">
+                                  <Music className="w-6 h-6 text-blue-400" />
+                                </div>
+                                <div>
+                                  <h3 className="font-semibold text-xl text-white">
+                                    {clip.title || "Untitled Song"}
+                                  </h3>
+                                  {clip.status === "streaming" && (
+                                    <span className="inline-flex items-center gap-1 text-xs bg-yellow-400/20 text-yellow-400 px-3 py-1 rounded-full mt-1">
+                                      <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                                      Live Streaming
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                              <div className="text-xs text-muted-foreground">
+                              <div className="text-sm text-blue-200/60 font-medium">
                                 {clip.metadata.duration
                                   ? `${Math.round(clip.metadata.duration)}s`
                                   : ""}
@@ -840,17 +993,32 @@ export default function MusicGenerator() {
                             </div>
 
                             {clip.metadata.tags && (
-                              <p className="text-sm text-muted-foreground">
-                                Style: {clip.metadata.tags}
-                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                <span className="text-sm text-teal-400 font-medium">
+                                  Style:
+                                </span>
+                                {clip.metadata.tags
+                                  .split(",")
+                                  .map((tag, index) => (
+                                    <span
+                                      key={index}
+                                      className="px-2 py-1 bg-teal-400/10 text-teal-300 rounded-full text-xs font-medium"
+                                    >
+                                      {tag.trim()}
+                                    </span>
+                                  ))}
+                              </div>
                             )}
 
                             {clip.status === "streaming" && (
-                              <p className="text-xs text-orange-600 bg-orange-50 p-2 rounded">
-                                🎵 This song is still generating! You can start
-                                listening, but full features (like scrubbing)
-                                will be available once complete.
-                              </p>
+                              <div className="glass p-3 rounded-xl bg-yellow-400/5 border border-yellow-400/20">
+                                <p className="text-sm text-yellow-300 flex items-center gap-2">
+                                  <span className="text-lg">🎵</span>
+                                  Your song is still being composed! You can
+                                  start listening, but full playback controls
+                                  will be available once complete.
+                                </p>
+                              </div>
                             )}
 
                             {/* Audio Controls */}
@@ -860,7 +1028,7 @@ export default function MusicGenerator() {
                                 (duration[clip.id] ||
                                   clip.metadata.duration) && (
                                   <div className="space-y-2">
-                                    <div className="flex justify-between text-sm font-medium text-orange-700/80">
+                                    <div className="flex justify-between text-sm font-medium text-blue-200/80">
                                       <span>
                                         {formatTime(
                                           getDisplayPosition(clip.id)
@@ -874,14 +1042,14 @@ export default function MusicGenerator() {
                                     {/* Custom Progress Bar */}
                                     <div className="relative">
                                       <div
-                                        className="h-2 bg-gradient-to-r from-orange-100 to-red-100 rounded-full cursor-pointer border border-orange-200/50"
+                                        className="h-3 bg-gradient-to-r from-blue-400/10 to-teal-400/10 rounded-full cursor-pointer border border-blue-400/20 backdrop-blur-sm"
                                         data-clip-id={clip.id}
                                         onClick={(e) =>
                                           handleTrackClick(clip, e)
                                         }
                                       >
                                         <div
-                                          className="h-2 bg-gradient-to-r from-orange-400 to-red-500 rounded-full pointer-events-none"
+                                          className="h-3 progress-gradient rounded-full pointer-events-none shadow-lg"
                                           style={{
                                             width: `${getProgressPercentage(
                                               clip.id,
@@ -891,9 +1059,9 @@ export default function MusicGenerator() {
                                         />
                                         {/* Scrub handle */}
                                         <div
-                                          className={`absolute top-1/2 w-4 h-4 bg-gradient-to-r from-orange-500 to-red-600 rounded-full transform -translate-y-1/2 -translate-x-1/2 shadow-lg cursor-grab hover:from-orange-600 hover:to-red-700 select-none ${
+                                          className={`absolute top-1/2 w-5 h-5 bg-gradient-to-r from-blue-400 to-teal-400 rounded-full transform -translate-y-1/2 -translate-x-1/2 shadow-xl cursor-grab hover:from-blue-500 hover:to-teal-500 select-none transition-all duration-200 ${
                                             isDragging === clip.id
-                                              ? "cursor-grabbing scale-110"
+                                              ? "cursor-grabbing scale-125"
                                               : ""
                                           }`}
                                           style={{
@@ -1026,7 +1194,9 @@ export default function MusicGenerator() {
                               {clip.status === "complete" && clip.audio_url && (
                                 <div className="mt-4">
                                   <Waveform
-                                    audioElement={audioElements[clip.id] || null}
+                                    audioElement={
+                                      audioElements[clip.id] || null
+                                    }
                                     audioUrl={clip.audio_url}
                                     isPlaying={!!isPlaying[clip.id]}
                                     className="rounded-lg shadow-sm"
@@ -1036,21 +1206,20 @@ export default function MusicGenerator() {
                               )}
 
                               {/* Control Buttons */}
-                              <div className="flex gap-2">
+                              <div className="flex gap-3">
                                 <Button
                                   onClick={() => togglePlayPause(clip)}
-                                  variant="outline"
-                                  size="sm"
-                                  className="flex-1"
+                                  size="lg"
+                                  className="flex-1 h-12 btn-gradient text-white font-semibold rounded-2xl shadow-lg hover:shadow-blue-400/25 transition-all duration-300"
                                 >
                                   {isPlaying[clip.id] ? (
                                     <>
-                                      <Pause className="w-4 h-4 mr-2" />
+                                      <Pause className="w-5 h-5 mr-2" />
                                       Pause
                                     </>
                                   ) : (
                                     <>
-                                      <Play className="w-4 h-4 mr-2" />
+                                      <Play className="w-5 h-5 mr-2" />
                                       Play
                                     </>
                                   )}
@@ -1058,9 +1227,13 @@ export default function MusicGenerator() {
 
                                 <Button
                                   onClick={() => handleDownload(clip)}
-                                  variant="secondary"
-                                  size="sm"
-                                  className="flex-1"
+                                  size="lg"
+                                  className={`flex-1 h-12 font-semibold rounded-2xl transition-all duration-300 ${
+                                    clip.status === "streaming" ||
+                                    isDownloading[clip.id]
+                                      ? "glass border-2 border-gray-400/30 text-gray-400"
+                                      : "glass border-2 border-teal-400/30 hover:border-teal-400/60 text-white hover:bg-teal-400/10 hover-lift shadow-lg hover:shadow-teal-400/25"
+                                  }`}
                                   disabled={
                                     isDownloading[clip.id] ||
                                     clip.status === "streaming"
@@ -1068,31 +1241,67 @@ export default function MusicGenerator() {
                                 >
                                   {isDownloading[clip.id] ? (
                                     <>
-                                      <div className="w-4 h-4 border-2 border-secondary-foreground/30 border-t-secondary-foreground rounded-full animate-spin mr-2" />
+                                      <div className="w-5 h-5 border-2 border-current/30 border-t-current rounded-full animate-spin mr-2" />
                                       Downloading...
                                     </>
                                   ) : clip.status === "streaming" ? (
                                     <>
-                                      <Download className="w-4 h-4 mr-2 opacity-50" />
+                                      <Download className="w-5 h-5 mr-2 opacity-50" />
                                       Available when complete
                                     </>
                                   ) : (
                                     <>
-                                      <Download className="w-4 h-4 mr-2" />
+                                      <Download className="w-5 h-5 mr-2" />
                                       Download
                                     </>
                                   )}
                                 </Button>
                               </div>
+
+                              {/* Lyrics Transcription Section */}
+                              {clip.status === "complete" && (
+                                <div className="mt-6 pt-4 border-t border-gray-600/30">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <span className="text-lg">🎤</span>
+                                    <h4 className="text-lg font-semibold text-white">
+                                      Lyrics
+                                    </h4>
+                                  </div>
+
+                                  {isTranscribing[clip.id] ? (
+                                    <div className="glass p-4 rounded-xl bg-blue-400/5 border border-blue-400/20">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-5 h-5 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
+                                        <p className="text-blue-300">
+                                          Transcribing lyrics...
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ) : transcriptions[clip.id] ? (
+                                    <div className="glass p-4 rounded-xl bg-gray-500/5 border border-gray-500/20">
+                                      <p className="text-gray-200 leading-relaxed whitespace-pre-line">
+                                        {transcriptions[clip.id]}
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div className="glass p-4 rounded-xl bg-gray-500/5 border border-gray-500/20">
+                                      <p className="text-gray-400 italic">
+                                        Lyrics will appear automatically once
+                                        transcription completes
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </Card>
                       );
                     })}
                 </div>
-              )}
-            </div>
-          </Card>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

@@ -1,9 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { Mail, Music, Brain, Sparkles, CheckCircle, Loader2, X, MessageSquare } from 'lucide-react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import React, { useEffect, useState } from "react";
+import {
+  Mail,
+  Music,
+  Brain,
+  Sparkles,
+  CheckCircle,
+  Loader2,
+  X,
+  MessageSquare,
+} from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
-export type ProcessingStep = 'messages' | 'gmail' | 'spotify' | 'claude' | 'suno' | 'complete';
+export type ProcessingStep =
+  | "messages"
+  | "gmail"
+  | "spotify"
+  | "claude"
+  | "suno"
+  | "complete";
 
 export interface ProcessingState {
   currentStep: ProcessingStep;
@@ -32,10 +47,13 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
   onCancel,
   onComplete,
 }) => {
-  const [displayedPrompt, setDisplayedPrompt] = useState('');
+  const [displayedPrompt, setDisplayedPrompt] = useState("");
 
   useEffect(() => {
-    if (processingState.data.generatedPrompt && processingState.currentStep === 'claude') {
+    if (
+      processingState.data.generatedPrompt &&
+      processingState.currentStep === "claude"
+    ) {
       let index = 0;
       const fullPrompt = processingState.data.generatedPrompt;
       const timer = setInterval(() => {
@@ -52,7 +70,10 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
 
   // Auto-complete after Suno step starts
   useEffect(() => {
-    if (processingState.currentStep === 'suno' && processingState.progress >= 80) {
+    if (
+      processingState.currentStep === "suno" &&
+      processingState.progress >= 80
+    ) {
       const timer = setTimeout(() => {
         onComplete();
       }, 2000); // Give 2 seconds to show Suno started
@@ -64,57 +85,57 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
 
   const steps = [
     {
-      key: 'messages' as ProcessingStep,
+      key: "messages" as ProcessingStep,
       icon: MessageSquare,
-      title: 'Message Analysis',
-      description: 'Extracting conversation patterns',
+      title: "Message Analysis",
+      description: "Extracting conversation patterns",
     },
     {
-      key: 'gmail' as ProcessingStep,
+      key: "gmail" as ProcessingStep,
       icon: Mail,
-      title: 'Gmail Collection',
-      description: 'Analyzing your recent emails',
+      title: "Gmail Collection",
+      description: "Analyzing your recent emails",
     },
     {
-      key: 'spotify' as ProcessingStep,
+      key: "spotify" as ProcessingStep,
       icon: Music,
-      title: 'Spotify Analysis',
-      description: 'Discovering your music taste',
+      title: "Spotify Analysis",
+      description: "Discovering your music taste",
     },
     {
-      key: 'claude' as ProcessingStep,
+      key: "claude" as ProcessingStep,
       icon: Brain,
-      title: 'AI Generation',
-      description: 'Creating personalized prompt',
+      title: "AI Generation",
+      description: "Creating personalized prompt",
     },
     {
-      key: 'suno' as ProcessingStep,
+      key: "suno" as ProcessingStep,
       icon: Sparkles,
-      title: 'Music Creation',
-      description: 'Composing your song',
+      title: "Music Creation",
+      description: "Composing your song",
     },
   ];
 
   const getStepStatus = (stepKey: ProcessingStep) => {
-    const stepOrder = ['messages', 'gmail', 'spotify', 'claude', 'suno'];
+    const stepOrder = ["messages", "gmail", "spotify", "claude", "suno"];
     const currentIndex = stepOrder.indexOf(processingState.currentStep);
     const stepIndex = stepOrder.indexOf(stepKey);
 
-    if (stepIndex < currentIndex) return 'completed';
-    if (stepIndex === currentIndex) return 'active';
-    return 'pending';
+    if (stepIndex < currentIndex) return "completed";
+    if (stepIndex === currentIndex) return "active";
+    return "pending";
   };
 
   return (
-    <Card className="p-6 bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 border border-blue-200/50 shadow-lg">
+    <Card className="p-6 surface-2 border border-gray-600/50 shadow-lg">
       <div className="space-y-6">
         <div className="flex justify-between items-center">
-          <h3 className="text-xl font-bold text-gray-800">Creating Your Personal Song</h3>
+          <h3 className="text-xl font-bold text-white">Creating Your Personal Song</h3>
           <Button
             onClick={onCancel}
             variant="ghost"
             size="sm"
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-400 hover:text-white"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -123,12 +144,12 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
         {/* Progress Bar */}
         <div className="space-y-2">
           <div className="flex justify-between items-center">
-            <span className="text-sm font-medium text-gray-700">Overall Progress</span>
-            <span className="text-sm text-gray-500">{Math.round(processingState.progress)}%</span>
+            <span className="text-sm font-medium text-white">Overall Progress</span>
+            <span className="text-sm text-gray-300">{Math.round(processingState.progress)}%</span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-3">
+          <div className="w-full bg-gray-700 rounded-full h-3">
             <div
-              className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500"
+              className="bg-gradient-to-r from-blue-600 to-teal-600 h-3 rounded-full transition-all duration-500"
               style={{ width: `${processingState.progress}%` }}
             />
           </div>
@@ -142,8 +163,8 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
 
             return (
               <div key={step.key} className={`text-center p-3 rounded-lg ${
-                status === 'active' ? 'bg-blue-100 border border-blue-300' :
-                status === 'completed' ? 'bg-green-100 border border-green-300' : 'bg-gray-50'
+                status === 'active' ? 'surface-3 border border-blue-500/50' :
+                status === 'completed' ? 'surface-3 border border-green-500/50' : 'surface-1 border border-gray-600/30'
               }`}>
                 <div className={`mx-auto w-10 h-10 rounded-full flex items-center justify-center mb-2 ${
                   status === 'completed' ? 'bg-green-500' :
@@ -151,15 +172,15 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
                 }`}>
                   {status === 'completed' ? (
                     <CheckCircle className="h-6 w-6 text-white" />
-                  ) : status === 'active' ? (
+                  ) : status === "active" ? (
                     <Loader2 className="h-5 w-5 text-white animate-spin" />
                   ) : (
                     <IconComponent className="h-5 w-5 text-white" />
                   )}
                 </div>
                 <h4 className={`font-semibold text-sm ${
-                  status === 'active' ? 'text-blue-900' :
-                  status === 'completed' ? 'text-green-900' : 'text-gray-600'
+                  status === 'active' ? 'text-blue-300' :
+                  status === 'completed' ? 'text-green-400' : 'text-gray-300'
                 }`}>
                   {step.title}
                 </h4>
@@ -171,7 +192,7 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
         {/* Current Activity */}
         {processingState.currentSubStep && (
           <div className="text-center">
-            <p className="text-sm font-medium text-blue-700">
+            <p className="text-sm font-medium text-blue-300">
               {processingState.currentSubStep}
             </p>
           </div>
@@ -180,9 +201,9 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
         {/* Data Previews */}
         <div className="space-y-3">
           {processingState.data.messagesPreview && (
-            <div className="p-3 bg-white/60 rounded-lg border border-gray-200">
-              <strong className="text-xs text-gray-600">Recent conversations:</strong>
-              <div className="mt-1 text-xs text-gray-700">
+            <div className="p-3 surface-1 rounded-lg border border-gray-600/30">
+              <strong className="text-xs text-teal-400">Recent conversations:</strong>
+              <div className="mt-1 text-xs text-gray-300">
                 {processingState.data.messagesPreview.slice(0, 2).map((conversation, i) => (
                   <div key={i} className="truncate">• {conversation}</div>
                 ))}
@@ -191,9 +212,9 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
           )}
 
           {processingState.data.gmailPreview && (
-            <div className="p-3 bg-white/60 rounded-lg border border-gray-200">
-              <strong className="text-xs text-gray-600">Recent emails:</strong>
-              <div className="mt-1 text-xs text-gray-700">
+            <div className="p-3 surface-1 rounded-lg border border-gray-600/30">
+              <strong className="text-xs text-teal-400">Recent emails:</strong>
+              <div className="mt-1 text-xs text-gray-300">
                 {processingState.data.gmailPreview.slice(0, 2).map((subject, i) => (
                   <div key={i} className="truncate">• {subject}</div>
                 ))}
@@ -202,30 +223,30 @@ const InlineProcessing: React.FC<InlineProcessingProps> = ({
           )}
 
           {processingState.data.spotifyPreview && (
-            <div className="p-3 bg-white/60 rounded-lg border border-gray-200">
-              <strong className="text-xs text-gray-600">Top artists:</strong>
-              <p className="mt-1 text-xs text-gray-700">
+            <div className="p-3 surface-1 rounded-lg border border-gray-600/30">
+              <strong className="text-xs text-teal-400">Top artists:</strong>
+              <p className="mt-1 text-xs text-gray-300">
                 {processingState.data.spotifyPreview.slice(0, 3).join(', ')}
               </p>
             </div>
           )}
 
           {displayedPrompt && (
-            <div className="p-3 bg-white/60 rounded-lg border border-gray-200">
-              <strong className="text-xs text-gray-600">Generated Prompt:</strong>
-              <p className="mt-1 text-xs text-gray-700 italic">"{displayedPrompt}"</p>
+            <div className="p-3 surface-1 rounded-lg border border-gray-600/30">
+              <strong className="text-xs text-teal-400">Generated Prompt:</strong>
+              <p className="mt-1 text-xs text-gray-300 italic whitespace-pre-wrap break-words">"{displayedPrompt}"</p>
             </div>
           )}
         </div>
 
         {/* Error Display */}
         {processingState.data.error && (
-          <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+          <div className="p-3 surface-1 rounded-lg border border-red-500/30">
             <div className="flex">
               <X className="h-4 w-4 text-red-500 mt-0.5 mr-2" />
               <div>
-                <h4 className="text-sm font-medium text-red-800">Processing Error</h4>
-                <p className="text-sm text-red-700 mt-1">{processingState.data.error}</p>
+                <h4 className="text-sm font-medium text-red-400">Processing Error</h4>
+                <p className="text-sm text-red-300 mt-1">{processingState.data.error}</p>
               </div>
             </div>
           </div>
